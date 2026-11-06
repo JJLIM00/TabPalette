@@ -1,0 +1,174 @@
+import * as assert from 'assert';
+import { STORAGE_KEY, GroupStore, StateStorage } from '../store';
+
+/** In-memory stand-in for VS Code's workspaceState. */
+class FakeStorage implements StateStorage {
+  data = new Map<string, unknown>();
+  get<T>(key: string): T | undefined {
+    return this.data.get(key) as T | undefined;
+  }
+  update(key: string, value: unknown): Thenable<void> {
+    this.data.set(key, JSON.parse(JSON.stringify(value)));
+    return Promise.resolve();
+  }
+}
+
+const file = (name: string) => `file:///ws/${name}`;
+const A = file('a.ts');
+const B = file('b.ts');
+const C = file('c.ts');
+
+/** Member file names of a group, e.g. ['a.ts', 'b.ts']. */
+function members(store: GroupStore, id: string): string[] {
+  return store.get(id)!.uris.map((u) => u.slice(u.lastIndexOf('/') + 1));
+}
+
+suite('Group store', () => {
+  let store: GroupStore;
+  setup(() => {
+    store = new GroupStore(new FakeStorage());
+  });
+
+  suite('creating groups', () => {
+    test('new groups get the next unused color, in Chrome order', () => {
+      assert.strictEqual(store.create('Main').color, 'grey');
+      assert.strictEqual(store.create('Work').color, 'blue');
+      assert.strictEqual(store.create('Bugs', 'red').color, 'red');
+      assert.strictEqual(store.nextColor(), 'yellow');
+    });
+
+    test('colors start over once all nine are used', () => {
+      for (let i = 0; i < 9; i++) {
+        store.create(`G${i}`);
+      }
+      assert.strictEqual(store.nextColor(), 'grey');
+    });
+
+    test('names are trimmed when created, but kept as typed when renamed (so live typing keeps spaces)', () => {
+      const g = store.create('  Main  ');
+      assert.strictEqual(store.get(g.id)!.name, 'Main');
+      store.rename(g.id, 'My ');
+      assert.strictEqual(store.get(g.id)!.name, 'My ');
+    });
+
+    test('a new group starts expanded and open', () => {
+      const g = store.create('Main');
+      assert.strictEqual(g.collapsed, false);
+      assert.strictEqual(g.closed, false);
+    });
+  });
+
+  suite('tabs in groups', () => {
+    test('a file belongs to at most one group: adding it elsewhere moves it', () => {
+      const main = store.create('Main', 'grey', [A, B]);
+      const work = store.create('Work', 'blue', [B]);
+      assert.deepStrictEqual(members(store, main.id), ['a.ts']);
+      assert.deepStrictEqual(members(store, work.id), ['b.ts']);
+
+      store.addUris(work.id, [A]);
+      assert.deepStrictEqual(members(store, main.id), []);
+      assert.strictEqual(store.groupOf(A)!.id, work.id);
+    });
+
+    test('a tab can be inserted before a given member, or reordered inside its group', () => {
+      const g = store.create('Main', 'grey', [A, B]);
+      store.addUris(g.id, [C], B);
+      assert.deepStrictEqual(members(store, g.id), ['a.ts', 'c.ts', 'b.ts']);
+      store.addUris(g.id, [B], A);
+      assert.deepStrictEqual(members(store, g.id), ['b.ts', 'a.ts', 'c.ts']);
+    });
+
+    test('removing tabs leaves an empty group until it is pruned', () => {
+      const g = store.create('Main', 'grey', [A]);
+      store.removeUris([A]);
+      assert.deepStrictEqual(members(store, g.id), []);
+      store.pruneEmpty();
+      assert.strictEqual(store.get(g.id), undefined);
+    });
+
+    test('pruning keeps a closed group even though none of its tabs are open', () => {
+      const open = store.create('Open', 'grey', [A]);
+      const closed = store.create('Closed', 'blue', [B]);
+      store.setClosed(closed.id, true);
+      store.removeUris([A]);
+      store.pruneEmpty();
+      assert.strictEqual(store.get(open.id), undefined);
+      assert.ok(store.get(closed.id));
+    });
+  });
+
+  suite('group state', () => {
+    test('rename, recolor, collapse and close are saved on the group', () => {
+      const g = store.create('Main', 'grey', [A]);
+      store.rename(g.id, 'Work');
+      store.setColor(g.id, 'purple');
+      store.setCollapsed(g.id, true);
+      assert.deepStrictEqual(
+        { name: store.get(g.id)!.name, color: store.get(g.id)!.color, collapsed: store.get(g.id)!.collapsed },
+        { name: 'Work', color: 'purple', collapsed: true },
+      );
+    });
+
+    test('closing a group clears its collapsed state (it reopens expanded)', () => {
+      const g = store.create('Main', 'grey', [A]);
+      store.setCollapsed(g.id, true);
+      store.setClosed(g.id, true);
+      assert.strictEqual(store.get(g.id)!.closed, true);
+      assert.strictEqual(store.get(g.id)!.collapsed, false);
+    });
+
+    test('every change notifies listeners (the tab bar redraws on it)', () => {
+      let changes = 0;
+      store.onDidChange(() => changes++);
+      const g = store.create('G');
+      store.rename(g.id, 'H');
+      store.setColor(g.id, 'red');
+      store.remove(g.id);
+      assert.strictEqual(changes, 4);
+    });
+  });
+
+  suite('file renames and deletes', () => {
+    test('a renamed file or folder keeps its group membership', () => {
+      const g = store.create('G', 'grey', [file('src/x.ts'), file('srcx/y.ts'), A]);
+      store.renameUri(file('src'), file('lib'));
+      store.renameUri(A, file('a2.ts'));
+      assert.deepStrictEqual(store.get(g.id)!.uris, [file('lib/x.ts'), file('srcx/y.ts'), file('a2.ts')]);
+    });
+
+    test('deleting a folder removes the files inside it from their groups', () => {
+      const g = store.create('G', 'grey', [file('src/x.ts'), A]);
+      store.removeUriTree(file('src'));
+      assert.deepStrictEqual(members(store, g.id), ['a.ts']);
+    });
+  });
+
+  suite('saving per workspace', () => {
+    test('groups are saved and come back after a reload', () => {
+      const storage = new FakeStorage();
+      const first = new GroupStore(storage);
+      const g = first.create('Main', 'grey', [A]);
+      first.rename(g.id, 'Renamed');
+      first.setColor(g.id, 'purple');
+      first.setCollapsed(g.id, true);
+
+      assert.deepStrictEqual(new GroupStore(storage).all(), [
+        { id: g.id, name: 'Renamed', color: 'purple', uris: [A], collapsed: true, closed: false },
+      ]);
+    });
+
+    test('damaged saved data is repaired on load instead of breaking the extension', () => {
+      const storage = new FakeStorage();
+      storage.data.set(STORAGE_KEY, [
+        { id: 'g1', name: 'One', color: 'not-a-color', uris: [A, A, 5] },
+        { id: 'g2', uris: [A, B] },
+        { name: 'no id' },
+        null,
+      ]);
+      assert.deepStrictEqual(new GroupStore(storage).all(), [
+        { id: 'g1', name: 'One', color: 'grey', uris: [A], collapsed: false, closed: false },
+        { id: 'g2', name: '', color: 'grey', uris: [B], collapsed: false, closed: false },
+      ]);
+    });
+  });
+});

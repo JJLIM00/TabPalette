@@ -1,0 +1,17 @@
+.vscode/**
+.vscode-test/**
+src/**
+out/**
+test-fixtures/**
+node_modules/**
+images/**
+!images/icon.png
+.gitignore
+.npmrc
+pnpm-lock.yaml
+esbuild.js
+eslint.config.mjs
+tsconfig.json
+.vscode-test.mjs
+**/*.map
+**/*.ts

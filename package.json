@@ -1,0 +1,382 @@
+{
+  "name": "tabpalette",
+  "displayName": "TabPalette - Tab Groups",
+  "description": "Chrome-style tab groups on the VS Code tab bar: named, colored groups you can collapse, drag tabs into, and reorder.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#202124",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "tabs",
+    "tab groups",
+    "chrome",
+    "group tabs",
+    "organize tabs",
+    "tab colors",
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "tabPalette.addToGroup",
+        "title": "Add Tab to Group…",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.addToNewGroup",
+        "title": "Add Tab to New Group",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.removeFromGroup",
+        "title": "Remove Tab from Group",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.moveToGroup",
+        "title": "Move Tab to Another Group…",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.addSelectedToGroup",
+        "title": "Add Selected Tabs to Group…",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.addSelectedToNewGroup",
+        "title": "Add Selected Tabs to New Group",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.removeSelectedFromGroup",
+        "title": "Remove Selected Tabs from Group",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.editGroup",
+        "title": "Edit Group…",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.renameGroup",
+        "title": "Rename Group…",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.changeColor",
+        "title": "Change Group Color…",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.toggleCollapse",
+        "title": "Collapse / Expand Group",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.newTabInGroup",
+        "title": "New Tab in Group…",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.moveGroupToNewWindow",
+        "title": "Move Group to New Window",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.closeGroup",
+        "title": "Close Group",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.openGroup",
+        "title": "Reopen Closed Group…",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.ungroup",
+        "title": "Ungroup",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.deleteGroup",
+        "title": "Delete Group",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.showMenu",
+        "title": "Show Tab Groups",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.enablePatch",
+        "title": "Enable Chrome-style Tab Groups (patches VS Code)",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.disablePatch",
+        "title": "Disable Chrome-style Tab Groups",
+        "category": "Tab Groups"
+      }
+    ],
+    "menus": {
+      "editor/title/context": [
+        {
+          "command": "tabPalette.addToGroup",
+          "group": "1_tabpalette@1",
+          "when": "!multipleEditorsSelectedInGroup && resource not in tabPalette.groupedUris"
+        },
+        {
+          "command": "tabPalette.addToNewGroup",
+          "group": "1_tabpalette@2",
+          "when": "!multipleEditorsSelectedInGroup && resource not in tabPalette.groupedUris"
+        },
+        {
+          "submenu": "tabPalette.tabSubmenu",
+          "group": "1_tabpalette@1",
+          "when": "!multipleEditorsSelectedInGroup && resource in tabPalette.groupedUris"
+        },
+        {
+          "command": "tabPalette.addSelectedToGroup",
+          "group": "1_tabpalette@1",
+          "when": "multipleEditorsSelectedInGroup"
+        },
+        {
+          "command": "tabPalette.addSelectedToNewGroup",
+          "group": "1_tabpalette@2",
+          "when": "multipleEditorsSelectedInGroup"
+        },
+        {
+          "command": "tabPalette.removeSelectedFromGroup",
+          "group": "1_tabpalette@3",
+          "when": "multipleEditorsSelectedInGroup"
+        }
+      ],
+      "tabPalette.tabSubmenu": [
+        {
+          "command": "tabPalette.moveToGroup",
+          "group": "1_tab@1"
+        },
+        {
+          "command": "tabPalette.removeFromGroup",
+          "group": "1_tab@2"
+        },
+        {
+          "command": "tabPalette.editGroup",
+          "group": "2_group@1"
+        },
+        {
+          "command": "tabPalette.toggleCollapse",
+          "group": "2_group@2"
+        },
+        {
+          "command": "tabPalette.newTabInGroup",
+          "group": "2_group@3"
+        },
+        {
+          "command": "tabPalette.moveGroupToNewWindow",
+          "group": "2_group@4"
+        },
+        {
+          "command": "tabPalette.closeGroup",
+          "group": "2_group@5"
+        },
+        {
+          "command": "tabPalette.ungroup",
+          "group": "3_cancel@1"
+        },
+        {
+          "command": "tabPalette.deleteGroup",
+          "group": "3_cancel@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "tabPalette.addToGroup",
+          "group": "7_tabpalette@1",
+          "when": "!explorerResourceIsFolder"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "tabPalette.moveToGroup",
+          "when": "false"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "tabPalette.addToGroup",
+        "key": "ctrl+alt+g",
+        "mac": "cmd+alt+g"
+      },
+      {
+        "command": "tabPalette.addSelectedToGroup",
+        "key": "ctrl+alt+g",
+        "mac": "cmd+alt+g",
+        "when": "multipleEditorsSelectedInGroup"
+      },
+      {
+        "command": "tabPalette.closeGroup",
+        "key": "ctrl+alt+shift+w",
+        "mac": "cmd+alt+shift+w"
+      },
+      {
+        "command": "tabPalette.showMenu",
+        "key": "ctrl+alt+t",
+        "mac": "cmd+alt+t"
+      }
+    ],
+    "colors": [
+      {
+        "id": "tabPalette.grey",
+        "description": "Tab group color: grey",
+        "defaults": {
+          "dark": "#DADCE0",
+          "light": "#5F6368",
+          "highContrast": "#DADCE0",
+          "highContrastLight": "#5F6368"
+        }
+      },
+      {
+        "id": "tabPalette.blue",
+        "description": "Tab group color: blue",
+        "defaults": {
+          "dark": "#8AB4F8",
+          "light": "#1A73E8",
+          "highContrast": "#8AB4F8",
+          "highContrastLight": "#1A73E8"
+        }
+      },
+      {
+        "id": "tabPalette.red",
+        "description": "Tab group color: red",
+        "defaults": {
+          "dark": "#F28B82",
+          "light": "#D93025",
+          "highContrast": "#F28B82",
+          "highContrastLight": "#D93025"
+        }
+      },
+      {
+        "id": "tabPalette.yellow",
+        "description": "Tab group color: yellow",
+        "defaults": {
+          "dark": "#FDD663",
+          "light": "#E37400",
+          "highContrast": "#FDD663",
+          "highContrastLight": "#E37400"
+        }
+      },
+      {
+        "id": "tabPalette.green",
+        "description": "Tab group color: green",
+        "defaults": {
+          "dark": "#81C995",
+          "light": "#1E8E3E",
+          "highContrast": "#81C995",
+          "highContrastLight": "#1E8E3E"
+        }
+      },
+      {
+        "id": "tabPalette.pink",
+        "description": "Tab group color: pink",
+        "defaults": {
+          "dark": "#FF8BCB",
+          "light": "#D01884",
+          "highContrast": "#FF8BCB",
+          "highContrastLight": "#D01884"
+        }
+      },
+      {
+        "id": "tabPalette.purple",
+        "description": "Tab group color: purple",
+        "defaults": {
+          "dark": "#C58AF9",
+          "light": "#9334E6",
+          "highContrast": "#C58AF9",
+          "highContrastLight": "#9334E6"
+        }
+      },
+      {
+        "id": "tabPalette.cyan",
+        "description": "Tab group color: cyan",
+        "defaults": {
+          "dark": "#78D9EC",
+          "light": "#007B83",
+          "highContrast": "#78D9EC",
+          "highContrastLight": "#007B83"
+        }
+      },
+      {
+        "id": "tabPalette.orange",
+        "description": "Tab group color: orange",
+        "defaults": {
+          "dark": "#FCAD70",
+          "light": "#C26401",
+          "highContrast": "#FCAD70",
+          "highContrastLight": "#C26401"
+        }
+      }
+    ],
+    "submenus": [
+      {
+        "id": "tabPalette.tabSubmenu",
+        "label": "Tab Group"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run package",
+    "compile": "pnpm run check-types && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "pnpm run check-types && node esbuild.js --production",
+    "check-types": "tsc --noEmit",
+    "compile-tests": "tsc -p . --outDir out",
+    "lint": "eslint src",
+    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "test": "vscode-test",
+    "vsix": "vsce package --no-dependencies",
+    "publish": "vsce publish --no-dependencies",
+    "test:ui": "pnpm run compile-tests && pnpm run compile && mocha --ui tdd --timeout 60000 \"out/test-ui/**/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.17.0",
+    "@types/vscode": "~1.90.0",
+    "@types/ws": "^8.18.2",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^4.1.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.20.0",
+    "mocha": "10",
+    "playwright-core": "1.49.1",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.24.0"
+  },
+  "dependencies": {
+    "ws": "^8.22.1"
+  },
+  "packageManager": "pnpm@10.6.5",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@vscode/vsce-sign",
+      "esbuild"
+    ]
+  }
+}
