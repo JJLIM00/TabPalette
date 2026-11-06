@@ -42,7 +42,7 @@ export class GroupStore implements vscode.Disposable {
 
   create(name: string, color: GroupColor = this.nextColor(), uris: string[] = []): TabGroup {
     const group: TabGroup = { id: newId(), name: name.trim(), color, uris: [], collapsed: false, closed: false };
-    this.detach(uris);
+    this.takeFromOtherGroups(uris);
     group.uris.push(...unique(uris));
     this.groups.push(group);
     this.commit();
@@ -95,8 +95,9 @@ export class GroupStore implements vscode.Disposable {
   }
 
   /**
-   * Adds files to a group, moving them out of any other group.
-   * When `beforeUri` is a member of the target group, they are inserted before it.
+   * Adds files to a group, moving them out of any other group (a group that loses its
+   * last tab this way is deleted, like Chrome). When `beforeUri` is a member of the
+   * target group, they are inserted before it.
    */
   addUris(id: string, uris: string[], beforeUri?: string): void {
     const g = this.get(id);
@@ -104,7 +105,7 @@ export class GroupStore implements vscode.Disposable {
       return;
     }
     const items = unique(uris);
-    this.detach(items);
+    this.takeFromOtherGroups(items, id);
     const index = beforeUri ? g.uris.indexOf(beforeUri) : -1;
     if (index < 0) {
       g.uris.push(...items);
@@ -155,6 +156,18 @@ export class GroupStore implements vscode.Disposable {
 
   dispose(): void {
     this.emitter.dispose();
+  }
+
+  /**
+   * Moving tabs into a group: takes them out of their current groups, and deletes any
+   * group that this leaves with no tabs (except `keepId`, and closed groups, which
+   * are kept on purpose until reopened or deleted).
+   */
+  private takeFromOtherGroups(uris: string[], keepId?: string): void {
+    const set = new Set(uris);
+    const losing = new Set(this.groups.filter((g) => g.id !== keepId && g.uris.some((u) => set.has(u))).map((g) => g.id));
+    this.detach(uris);
+    this.groups = this.groups.filter((g) => !losing.has(g.id) || g.uris.length > 0 || g.closed);
   }
 
   private detach(uris: string[]): boolean {

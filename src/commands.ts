@@ -127,6 +127,10 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
 
   const noFiles = () => void vscode.window.showInformationMessage('Open a file to add it to a tab group.');
 
+  /** The selected tabs for a tab context-menu command (`arg` = the right-clicked tab). */
+  const selectedTabs = (arg: unknown) =>
+    selectedTabUris(arg instanceof vscode.Uri ? arg : undefined, (anchor) => deps.bridge()?.selectedUris(anchor));
+
   // ---------- group actions (shared by commands and the chip editor) ----------
 
   const groupActions: Record<string, (group: TabGroup, value?: unknown) => unknown> = {
@@ -147,6 +151,16 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
       if (v && Number.isInteger(v.row) && Number.isInteger(v.index)) {
         return layout.moveGroupTo(g.id, v.row as number, v.index as number);
       }
+    },
+    // Tabs dropped onto one of the group's tabs: { row, labels } = the tab row and the dragged tabs' labels.
+    joinOnDrop: (g, value) => {
+      const drop = droppedTabs(value);
+      return drop && layout.joinDroppedTabs(g.id, drop.row, drop.labels);
+    },
+    // Tabs of this group dropped outside it: { row, labels } = the tab row and the dragged tabs' labels.
+    leaveOnDrop: (g, value) => {
+      const drop = droppedTabs(value);
+      return drop && layout.leaveDroppedTabs(g.id, drop.row, drop.labels);
     },
     close: (g) => layout.close(g.id),
     ungroup: (g) => store.remove(g.id),
@@ -194,15 +208,15 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
       store.pruneEmpty();
     },
     'tabPalette.addSelectedToGroup': async (arg) => {
-      const uris = await selectedTabUris(arg instanceof vscode.Uri ? arg : undefined);
+      const uris = await selectedTabs(arg);
       return commands['tabPalette.addToGroup'](undefined, uris.map((u) => vscode.Uri.parse(u)));
     },
     'tabPalette.addSelectedToNewGroup': async (arg) => {
-      const uris = await selectedTabUris(arg instanceof vscode.Uri ? arg : undefined);
+      const uris = await selectedTabs(arg);
       return commands['tabPalette.addToNewGroup'](undefined, uris.map((u) => vscode.Uri.parse(u)));
     },
     'tabPalette.removeSelectedFromGroup': async (arg) => {
-      const uris = await selectedTabUris(arg instanceof vscode.Uri ? arg : undefined);
+      const uris = await selectedTabs(arg);
       return commands['tabPalette.removeFromGroup'](undefined, uris.map((u) => vscode.Uri.parse(u)));
     },
 
@@ -327,6 +341,13 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
       await handler(group, action.value);
     }
   };
+}
+
+/** Validates a drop report from the tab bar: { row, labels } (labels of the dragged tabs). */
+function droppedTabs(value: unknown): { row: number; labels: string[] } | undefined {
+  const v = value as { row?: unknown; labels?: unknown } | undefined;
+  const labels = Array.isArray(v?.labels) ? v.labels.filter((l): l is string => typeof l === 'string') : [];
+  return v && Number.isInteger(v.row) && labels.length > 0 ? { row: v.row as number, labels } : undefined;
 }
 
 /** Quick-pick over workspace files; falls back to an open dialog without a workspace. */

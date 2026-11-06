@@ -331,6 +331,16 @@
           "highContrast": "#FCAD70",
           "highContrastLight": "#C26401"
         }
+      },
+      {
+        "id": "tabPalette.ungroupDropLine",
+        "description": "Drop line shown while dragging a tab, when releasing it would take the tab out of its group.",
+        "defaults": {
+          "dark": "#F14C4C",
+          "light": "#E51400",
+          "highContrast": "#F14C4C",
+          "highContrastLight": "#E51400"
+        }
       }
     ],
     "submenus": [

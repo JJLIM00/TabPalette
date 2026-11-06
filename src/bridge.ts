@@ -13,7 +13,8 @@ import { tabUri } from './tabs';
  * - Handshake: port + token are published to *this window only* as the
  *   accessibility label of a hidden status bar item, which the patch reads from the DOM.
  * - Extension → UI: `state` (groups + each tab row's labels and group ids).
- * - UI → extension: `action` messages (collapse, rename, color, close, …).
+ * - UI → extension: `action` messages (collapse, rename, color, close, …), and
+ *   `selection` (which tabs are selected, sent when a tab is right-clicked).
  */
 
 export const BRIDGE_LABEL_PREFIX = 'tab-groups-bridge:';
@@ -55,6 +56,8 @@ export class Bridge implements vscode.Disposable {
   private item: vscode.StatusBarItem | undefined;
   private readonly subscriptions: vscode.Disposable[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
+  /** The tab selection the tab bar last reported (tab row + positions of the selected tabs). */
+  private selection: { row: number; indexes: number[]; at: number } | undefined;
 
   constructor(
     private readonly store: GroupStore,
@@ -69,6 +72,21 @@ export class Bridge implements vscode.Disposable {
 
   get connections(): number {
     return this.clients.size;
+  }
+
+  /**
+   * The selected tabs (URI strings), as the tab bar reported them when a tab was just
+   * right-clicked. Undefined when there is no recent report, or `anchor` (the tab the
+   * command is for) is not part of it; callers then fall back to other ways.
+   */
+  selectedUris(anchor: string, maxAgeMs = 60_000): string[] | undefined {
+    const s = this.selection;
+    const row = s ? this.rows()[s.row] : undefined;
+    if (!s || !row || Date.now() - s.at > maxAgeMs) {
+      return undefined;
+    }
+    const uris = s.indexes.map((i) => (row.tabs[i] ? tabUri(row.tabs[i])?.toString() : undefined)).filter((u): u is string => !!u);
+    return uris.includes(anchor) ? uris : undefined;
   }
 
   async start(): Promise<void> {
@@ -107,7 +125,7 @@ export class Bridge implements vscode.Disposable {
     let authed = false;
     const timeout = setTimeout(() => !authed && socket.close(1008, 'auth timeout'), 5000);
     socket.on('message', (data) => {
-      let msg: { type?: string; token?: string; action?: string; groupId?: string; value?: unknown };
+      let msg: { type?: string; token?: string; action?: string; groupId?: string; value?: unknown; row?: unknown; indexes?: unknown };
       try {
         msg = JSON.parse(data.toString());
       } catch {
@@ -127,6 +145,13 @@ export class Bridge implements vscode.Disposable {
         clearTimeout(timeout);
         this.clients.add(socket);
         socket.send(JSON.stringify(buildState(this.store, this.rows())));
+        return;
+      }
+      if (msg.type === 'selection') {
+        const indexes = Array.isArray(msg.indexes) ? msg.indexes.filter((i): i is number => Number.isInteger(i) && i >= 0) : [];
+        if (Number.isInteger(msg.row) && indexes.length > 0) {
+          this.selection = { row: msg.row as number, indexes, at: Date.now() };
+        }
         return;
       }
       if (msg.type === 'action' && typeof msg.action === 'string' && typeof msg.groupId === 'string') {

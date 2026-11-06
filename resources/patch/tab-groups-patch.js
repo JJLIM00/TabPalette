@@ -423,6 +423,7 @@
     function (e) {
       var chip = e.target && e.target.closest ? e.target.closest('.tg-chip') : null;
       if (!chip) {
+        reportSelection(e);
         return;
       }
       e.preventDefault();
@@ -441,10 +442,179 @@
       if (downOnChip) {
         e.preventDefault();
         e.stopPropagation();
+        return;
+      }
+      var tab = e.target && e.target.closest ? e.target.closest('.tabs-container > .tab') : null;
+      tabDrag = tab ? { tab: tab, tabs: selectedWith(tab), join: null } : null;
+      if (tabDrag) {
+        tabDrag.labels = tabDrag.tabs.map(labelOf);
       }
     },
     true,
   );
+
+  // ---------------------------------------------------------------- selected tabs (Ctrl/Shift+click)
+  //
+  // The extension API cannot see which tabs are selected, but the tab bar can: VS Code marks
+  // them with the `selected` class. Acting on a selected tab means acting on the whole
+  // selection; acting on any other tab means just that tab (like VS Code's own tab commands).
+
+  function selectedWith(tab) {
+    var container = tab.parentElement;
+    if (!container || !tab.classList.contains('selected')) {
+      return [tab];
+    }
+    return Array.prototype.filter.call(container.children, function (t) {
+      return t.classList && t.classList.contains('tab') && t.classList.contains('selected');
+    });
+  }
+
+  /** Right-click on a tab: tell the extension which tabs a "selected tabs" command applies to. */
+  function reportSelection(e) {
+    var tab = e.target && e.target.closest ? e.target.closest('.tabs-container > .tab') : null;
+    var container = tab ? tab.parentElement : null;
+    if (!tab || !container || container.dataset.tgRow === undefined || !ws || ws.readyState !== 1) {
+      return;
+    }
+    var all = Array.prototype.filter.call(container.children, function (t) {
+      return t.classList && t.classList.contains('tab');
+    });
+    var indexes = selectedWith(tab).map(function (t) {
+      return all.indexOf(t);
+    });
+    ws.send(JSON.stringify({ type: 'selection', row: +container.dataset.tgRow, indexes: indexes }));
+  }
+
+  // ---------------------------------------------------------------- dragging a tab onto / off a group (Chrome)
+  //
+  // VS Code drops a tab before or after the tab under the cursor. Like Chrome, dropping it
+  // on any tab of a group adds it to that group (so even a group with one tab can be joined),
+  // while dropping it on the chip, or in front of it, puts it before the group. While
+  // joining, the drop line is drawn in the group's color. Dropping a grouped tab outside its
+  // group (on an ungrouped tab, on a chip, or on the empty end of the tab bar) takes it out
+  // of the group, even when the tab order does not change (e.g. the group's last tab dragged
+  // to the right). A group's only tab carries its group along instead. The move itself is
+  // VS Code's; on drop we tell the extension which group the tab joins or leaves.
+
+  var tabDrag = null;
+
+  /**
+   * Dragging a grouped tab (or several selected tabs) and hovering outside its group: leave
+   * it. When the drag holds all of the group's tabs in this row, they carry the group along.
+   */
+  function leaveTargetAt(e) {
+    var own = tabDrag.tab.dataset.tgGid;
+    var bar = e.target && e.target.closest ? e.target.closest('.tabs-and-actions-container') : null;
+    var container = bar ? bar.querySelector('.tabs-container') : null;
+    if (!own || !container || container !== tabDrag.tab.parentElement || container.dataset.tgRow === undefined) {
+      return null;
+    }
+    var mates = Array.prototype.filter.call(container.children, function (t) {
+      return tabDrag.tabs.indexOf(t) < 0 && t.dataset && t.dataset.tgGid === own;
+    });
+    if (mates.length === 0) {
+      return null; // the drag holds the whole group: it takes its group with it
+    }
+    var tab = e.target.closest('.tabs-container > .tab');
+    if (tab && tabDrag.tabs.indexOf(tab) >= 0) {
+      return null; // over one of the dragged tabs
+    }
+    var overChip = !!tab && e.clientX < tab.getBoundingClientRect().left;
+    if (tab && tab.dataset.tgGid && !overChip) {
+      return null; // over a group tab: its own group (reorder) or another one (join)
+    }
+    return { gid: own, row: +container.dataset.tgRow };
+  }
+
+  function joinTargetAt(e) {
+    var tab = e.target && e.target.closest ? e.target.closest('.tabs-container > .tab') : null;
+    if (!tab || tabDrag.tabs.indexOf(tab) >= 0 || !tab.dataset.tgGid || tab.dataset.tgGid === tabDrag.tab.dataset.tgGid) {
+      return null; // not a group tab, one of the dragged tabs, or the dragged tab's own group
+    }
+    if (e.clientX < tab.getBoundingClientRect().left) {
+      return null; // over the chip (it sits in the margin in front of the group's first tab)
+    }
+    var container = tab.parentElement;
+    if (!container || container.dataset.tgRow === undefined) {
+      return null;
+    }
+    // On the left half of a group's first tab, the tab joins at the start of that group: the
+    // line goes between its chip and the tab. Anywhere else the line stays where VS Code puts
+    // it (e.g. at the end of the group, in front of the next group's chip).
+    var rect = tab.getBoundingClientRect();
+    var atStart = tab.classList.contains('tg-first') && e.clientX - rect.left <= rect.width / 2;
+    return {
+      gid: tab.dataset.tgGid,
+      row: +container.dataset.tgRow,
+      container: container,
+      color: getComputedStyle(tab).getPropertyValue('--tg-color'),
+      startTab: atStart ? tab : null,
+    };
+  }
+
+  function showJoin(join) {
+    var was = tabDrag && tabDrag.join;
+    if (was && (!join || was.container !== join.container)) {
+      toggle(was.container, 'tg-join', false);
+      setVar(was.container, '--tg-join-color', '');
+    }
+    if (was && was.startTab && (!join || was.startTab !== join.startTab)) {
+      toggle(was.startTab, 'tg-join-start', false);
+    }
+    if (join) {
+      toggle(join.container, 'tg-join', true);
+      setVar(join.container, '--tg-join-color', join.color);
+      if (join.startTab) {
+        toggle(join.startTab, 'tg-join-start', true);
+      }
+    }
+    if (tabDrag) {
+      tabDrag.join = join;
+    }
+  }
+
+  document.addEventListener(
+    'dragover',
+    function (e) {
+      if (tabDrag) {
+        showJoin(joinTargetAt(e));
+        showLeave(tabDrag.join ? null : leaveTargetAt(e));
+      }
+    },
+    true,
+  );
+  document.addEventListener(
+    'drop',
+    function () {
+      if (tabDrag && tabDrag.join) {
+        send('joinOnDrop', tabDrag.join.gid, { row: tabDrag.join.row, labels: tabDrag.labels });
+      } else if (tabDrag && tabDrag.leave) {
+        send('leaveOnDrop', tabDrag.leave.gid, { row: tabDrag.leave.row, labels: tabDrag.labels });
+      }
+      endTabDrag();
+    },
+    true,
+  );
+  document.addEventListener('dragend', endTabDrag, true);
+
+  /** Releasing now would take the tab out of its group: the drop line turns the "ungroup" color. */
+  function showLeave(leave) {
+    if (!tabDrag) {
+      return;
+    }
+    var container = tabDrag.leaveContainer || tabDrag.tab.parentElement;
+    if (container) {
+      toggle(container, 'tg-leave', !!leave);
+      tabDrag.leaveContainer = leave ? container : null;
+    }
+    tabDrag.leave = leave;
+  }
+
+  function endTabDrag() {
+    showJoin(null);
+    showLeave(null);
+    tabDrag = null;
+  }
   document.addEventListener(
     'mouseup',
     function () {
@@ -614,6 +784,22 @@
 
     /* chip in its own slot just before the first tab (the tab is pushed right to make room) */
     T + '.tg-first, ' + T + '.tg-first.tg-first { margin-left: calc(var(--tg-chip-w, 14px) + 12px) !important; overflow: visible !important; }',
+    /* VS Code's drop marker for "drop before this tab" sits at the tab's left edge, which for a
+       group's first tab is after the chip and looks like "into the group". The drop lands
+       before the group, so draw the marker in front of the chip, at the start of its slot. */
+    T + '.tg-first.tg-first.tg-first.drop-target-right::before { left: calc(-1 * (var(--tg-chip-w, 14px) + 12px)) !important; }',
+    /* Dropping onto a group's tab joins the group: the drop line takes the group's color. When
+       joining at the start of a group (left half of its first tab), the line sits between that
+       group's chip and its tab; when joining the end of a group, it stays in front of the next
+       group's chip. */
+    '.monaco-workbench .part.editor .tabs-container.tg-join > .tab.drop-target-left::after, ' +
+      '.monaco-workbench .part.editor .tabs-container.tg-join > .tab.drop-target-right::before { background-color: var(--tg-join-color) !important; width: 3px !important; }',
+    '.monaco-workbench .part.editor .tabs-container.tg-join > .tab.tg-first.tg-first.tg-join-start.drop-target-right::before { left: 0 !important; }',
+    /* Releasing would take the dragged tab out of its group: the drop line shows the "ungroup"
+       theme color (tabPalette.ungroupDropLine, red by default; change it in workbench.colorCustomizations). */
+    '.monaco-workbench .part.editor .tabs-container.tg-leave > .tab.drop-target-left::after, ' +
+      '.monaco-workbench .part.editor .tabs-container.tg-leave > .tab.drop-target-right::before' +
+      ' { background-color: var(--vscode-tabPalette-ungroupDropLine, #F14C4C) !important; width: 3px !important; }',
     '.tg-chip { position: absolute; left: calc(-1 * (var(--tg-chip-w, 14px) + 6px)); top: 50%; transform: translateY(-50%); z-index: 12; box-sizing: border-box;' +
       ' height: 20px; line-height: 20px; padding: 0 8px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' +
       ' border-radius: 6px; background: var(--tg-color); color: var(--tg-chip-fg, #202124);' +

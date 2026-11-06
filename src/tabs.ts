@@ -40,15 +40,23 @@ export function activeTabUri(): vscode.Uri | undefined {
 /**
  * URIs of the tabs multi-selected (Ctrl/Shift+click) in the tab bar.
  *
- * The extension API does not expose tab selection, but VS Code's built-in
- * `copyFilePath` command resolves it: called with a tab's URI that is part of
- * the selection, it copies the paths of *all* selected tabs. We run it, read
- * the clipboard, put the user's clipboard text back, and map the paths to open
- * tabs. Falls back to just `anchor` when nothing else is selected.
+ * The extension API does not expose tab selection. The reliable source is the tab bar
+ * itself: with the tab bar patch on, it reports the selection when a tab is right-clicked
+ * (`fromTabBar`). Without it, fall back to VS Code's `copyFilePath` command, which copies
+ * the paths of all selected tabs when called with one of them: run it, read the clipboard,
+ * put the user's clipboard text back, and map the paths to open tabs. That depends on the
+ * clipboard, so it is only the fallback. Returns just `anchor` when nothing else is selected.
  */
-export async function selectedTabUris(anchor: vscode.Uri | undefined = activeTabUri()): Promise<string[]> {
+export async function selectedTabUris(
+  anchor: vscode.Uri | undefined = activeTabUri(),
+  fromTabBar?: (anchor: string) => string[] | undefined,
+): Promise<string[]> {
   if (!anchor) {
     return [];
+  }
+  const reported = fromTabBar?.(anchor.toString());
+  if (reported && reported.length > 0) {
+    return reported;
   }
   let copied = '';
   const saved = await vscode.env.clipboard.readText();

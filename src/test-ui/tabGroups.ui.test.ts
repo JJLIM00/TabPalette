@@ -112,6 +112,48 @@ suite('TabPalette — used like a person would', function () {
       assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'c.txt', 'b.txt', 'd.txt']);
     });
 
+    test('Ctrl+click several tabs, right-click → "Add Selected Tabs to Group…" adds all of them to an existing group', async () => {
+      await makeGroup('Main', ['a.txt']);
+      await vscode.clickTab('c.txt');
+      await vscode.clickTab('d.txt', ['Control']);
+      await vscode.tabMenu('d.txt', 'Add Selected Tabs to Group…');
+      await vscode.pickFromList('Main');
+      await vscode.waitUntil('c.txt and d.txt are in Main', async () => (await groupOf('c.txt')) === 'Main' && (await groupOf('d.txt')) === 'Main');
+      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'c.txt', 'd.txt', 'b.txt']);
+    });
+
+    test('several selected tabs are all added, also after clicking a file in the Explorer', async () => {
+      await makeGroup('Main', ['a.txt']);
+      await vscode.clickExplorerItem('b.txt');
+      await vscode.clickTab('c.txt');
+      await vscode.clickTab('d.txt', ['Control']);
+      await vscode.tabMenu('d.txt', 'Add Selected Tabs to Group…');
+      await vscode.pickFromList('Main');
+      await vscode.waitUntil('c.txt and d.txt are in Main', async () => (await groupOf('c.txt')) === 'Main' && (await groupOf('d.txt')) === 'Main');
+    });
+
+    test('Shift+click a range of tabs, right-click → "Add Selected Tabs to Group…" adds the whole range', async () => {
+      await makeGroup('Main', ['a.txt']);
+      await vscode.clickTab('b.txt');
+      await vscode.clickTab('d.txt', ['Shift']);
+      await vscode.tabMenu('c.txt', 'Add Selected Tabs to Group…');
+      await vscode.pickFromList('Main');
+      await vscode.waitUntil('b, c and d are in Main', async () =>
+        (await groupOf('b.txt')) === 'Main' && (await groupOf('c.txt')) === 'Main' && (await groupOf('d.txt')) === 'Main',
+      );
+    });
+
+    test('several selected tabs, right-click a tab outside the selection: only that tab is added (like VS Code\'s own tab commands)', async () => {
+      await makeGroup('Main', ['a.txt']);
+      await vscode.clickTab('c.txt');
+      await vscode.clickTab('d.txt', ['Control']);
+      await vscode.tabMenu('b.txt', 'Add Selected Tabs to Group…');
+      await vscode.pickFromList('Main');
+      await vscode.waitUntil('b.txt is in Main', async () => (await groupOf('b.txt')) === 'Main');
+      assert.strictEqual(await groupOf('c.txt'), null);
+      assert.strictEqual(await groupOf('d.txt'), null);
+    });
+
     test('Ctrl+Alt+G adds the current tab to a group', async () => {
       await makeGroup('Main', ['a.txt']);
       await vscode.clickTab('c.txt');
@@ -219,8 +261,11 @@ suite('TabPalette — used like a person would', function () {
       await vscode.clickTab('d.txt');
       await vscode.clickChip('Main');
       await vscode.open('b.txt');
-      await vscode.waitUntil('the group is expanded', async () => !(await vscode.chip('Main'))!.collapsed);
-      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'b.txt', 'c.txt', 'd.txt']);
+      // Wait for what the user sees: the group's tabs drawn again (the tab bar redraws on the next frame).
+      await vscode.waitUntil('the group is expanded and its tabs are shown', async () =>
+        (await vscode.tabNames()).join(' ') === 'a.txt b.txt c.txt d.txt',
+      );
+      assert.strictEqual((await vscode.chip('Main'))!.collapsed, false);
     });
   });
 
@@ -232,6 +277,153 @@ suite('TabPalette — used like a person would', function () {
       await vscode.dragTab('d.txt', { before: 'b.txt' });
       assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'd.txt', 'b.txt', 'c.txt']);
       await vscode.waitUntil('d.txt joined Main', async () => (await groupOf('d.txt')) === 'Main');
+    });
+
+    test('dropping a tab on a group\'s chip puts it between the groups: the line is drawn in front of the chip, and the tab joins neither', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt']);
+      await makeGroup('Tab', ['c.txt'], 'Blue');
+      await vscode.startTabDrag('d.txt', { onChip: 'Tab' });
+      const marker = await vscode.dropMarkerX();
+      const color = await vscode.dropMarkerColor();
+      const chip = await vscode.chipLeft('Tab');
+      await vscode.drop();
+
+      assert.ok(marker !== null, 'a drop line is shown');
+      assert.ok(marker! < chip, `drop line (x=${marker}) is left of the Tab chip (x=${chip}), not between the chip and its tab`);
+      assert.notStrictEqual(color, COLORS.Blue, 'the normal drop line, not the "join" color');
+      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'b.txt', 'd.txt', 'c.txt']);
+      await vscode.idle(1000);
+      assert.strictEqual(await groupOf('d.txt'), null);
+      assert.strictEqual(await groupOf('c.txt'), 'Tab');
+    });
+
+    test('a group with only one tab can be joined: drop on the right half of its tab', async () => {
+      await makeGroup('Solo', ['b.txt'], 'Green');
+      await vscode.startTabDrag('d.txt', { after: 'b.txt' });
+      const color = await vscode.dropMarkerColor();
+      await vscode.drop();
+
+      assert.strictEqual(color, COLORS.Green, 'while hovering, the drop line is in the group color');
+      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'b.txt', 'd.txt', 'c.txt']);
+      await vscode.waitUntil('d.txt joined Solo', async () => (await groupOf('d.txt')) === 'Solo');
+    });
+
+    test('a group with only one tab can be joined: drop between its chip and its tab (joins at the start)', async () => {
+      await makeGroup('Solo', ['c.txt'], 'Pink');
+      await vscode.startTabDrag('a.txt', { before: 'c.txt' });
+      const marker = await vscode.dropMarkerX();
+      const color = await vscode.dropMarkerColor();
+      const chip = await vscode.chipLeft('Solo');
+      await vscode.drop();
+
+      assert.strictEqual(color, COLORS.Pink, 'while hovering, the drop line is in the group color');
+      assert.ok(marker! > chip, `drop line (x=${marker}) is after the chip (x=${chip}), inside the group`);
+      await vscode.waitUntil('a.txt joined Solo', async () => (await groupOf('a.txt')) === 'Solo');
+      assert.deepStrictEqual(await vscode.tabNames(), ['b.txt', 'a.txt', 'c.txt', 'd.txt']);
+      assert.deepStrictEqual((await vscode.chips()).map((c) => c.name), ['Solo']);
+    });
+
+    test('joining the end of a group that has another group right after it: the line is drawn in front of the next group\'s chip', async () => {
+      await makeGroup('Tab', ['a.txt', 'b.txt'], 'Red');
+      await makeGroup('Main', ['c.txt'], 'Grey');
+      await vscode.startTabDrag('d.txt', { after: 'b.txt' });
+      const marker = await vscode.dropMarkerX();
+      const color = await vscode.dropMarkerColor();
+      const mainChip = await vscode.chipLeft('Main');
+      await vscode.drop();
+
+      assert.strictEqual(color, COLORS.Red, "the line is in Tab's color (the group being joined)");
+      assert.ok(marker! < mainChip, `the line (x=${marker}) is in front of the Main chip (x=${mainChip}), not between Main's chip and its tab`);
+      await vscode.waitUntil('d.txt joined Tab', async () => (await groupOf('d.txt')) === 'Tab');
+      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'b.txt', 'd.txt', 'c.txt']);
+      assert.strictEqual(await groupOf('c.txt'), 'Main');
+    });
+
+    test('dropping a tab on another group\'s tab moves it into that group', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt']);
+      await makeGroup('Work', ['d.txt'], 'Orange');
+      await vscode.dragTab('a.txt', { after: 'd.txt' });
+      await vscode.waitUntil('a.txt moved to Work', async () => (await groupOf('a.txt')) === 'Work');
+      assert.strictEqual(await groupOf('b.txt'), 'Main');
+    });
+
+    test('dragging the last tab of a group into another group removes the old group and its chip', async () => {
+      await makeGroup('Solo', ['a.txt'], 'Green');
+      await makeGroup('Main', ['c.txt', 'd.txt']);
+      await vscode.dragTab('a.txt', { before: 'd.txt' });
+      await vscode.waitUntil('a.txt joined Main', async () => (await groupOf('a.txt')) === 'Main');
+      assert.deepStrictEqual((await vscode.chips()).map((c) => c.name), ['Main'], 'the Solo chip is gone');
+      assert.deepStrictEqual(await vscode.tabNames(), ['b.txt', 'c.txt', 'a.txt', 'd.txt']);
+    });
+
+    test("dragging a group's last tab to the right, onto the next (ungrouped) tab, takes it out of the group", async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt']);
+      await vscode.startTabDrag('b.txt', { before: 'c.txt' });
+      const color = await vscode.dropMarkerColor();
+      await vscode.drop();
+
+      assert.strictEqual(color, COLORS.UngroupDropLine, 'while hovering, the drop line is red: releasing will ungroup the tab');
+      await vscode.waitUntil('b.txt left Main', async () => (await groupOf('b.txt')) === null);
+      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'b.txt', 'c.txt', 'd.txt'], 'the tab stays where it is, just outside the group');
+      assert.strictEqual(await groupOf('a.txt'), 'Main');
+    });
+
+    test('the "ungroup" drop line color can be changed in settings', async () => {
+      vscode.setUserSetting('workbench.colorCustomizations', { 'tabPalette.ungroupDropLine': '#00ff00' });
+      try {
+        await vscode.idle(1500); // VS Code picks up the settings file change
+        await makeGroup('Main', ['a.txt', 'b.txt']);
+        await vscode.startTabDrag('b.txt', { before: 'c.txt' });
+        const color = await vscode.dropMarkerColor();
+        await vscode.drop();
+        assert.strictEqual(color, 'rgb(0, 255, 0)');
+      } finally {
+        vscode.setUserSetting('workbench.colorCustomizations', undefined);
+        await vscode.idle(1500);
+      }
+    });
+
+    test('the drop line is not red while a tab is only being moved inside its group', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt', 'c.txt']);
+      await vscode.startTabDrag('c.txt', { before: 'b.txt' });
+      const color = await vscode.dropMarkerColor();
+      await vscode.drop();
+      assert.notStrictEqual(color, COLORS.UngroupDropLine);
+      assert.strictEqual(await groupOf('c.txt'), 'Main');
+    });
+
+    test("dragging a group's last tab to the empty end of the tab bar takes it out of the group", async () => {
+      await makeGroup('Main', ['c.txt', 'd.txt']);
+      await vscode.dragTab('d.txt', { end: true });
+      await vscode.waitUntil('d.txt left Main', async () => (await groupOf('d.txt')) === null);
+      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'b.txt', 'c.txt', 'd.txt']);
+      assert.strictEqual(await groupOf('c.txt'), 'Main');
+    });
+
+    test('several selected tabs dragged onto a group all join it', async () => {
+      await makeGroup('Solo', ['a.txt'], 'Green');
+      await vscode.clickTab('c.txt');
+      await vscode.clickTab('d.txt', ['Control']);
+      await vscode.dragTab('d.txt', { after: 'a.txt' });
+      await vscode.waitUntil('c.txt and d.txt joined Solo', async () => (await groupOf('c.txt')) === 'Solo' && (await groupOf('d.txt')) === 'Solo');
+      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'c.txt', 'd.txt', 'b.txt']);
+    });
+
+    test('several selected tabs dragged out of their group all leave it', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt', 'c.txt']);
+      await vscode.clickTab('b.txt');
+      await vscode.clickTab('c.txt', ['Control']);
+      await vscode.dragTab('c.txt', { end: true });
+      await vscode.waitUntil('b.txt and c.txt left Main', async () => (await groupOf('b.txt')) === null && (await groupOf('c.txt')) === null);
+      assert.strictEqual(await groupOf('a.txt'), 'Main');
+    });
+
+    test("a group's only tab dragged out keeps its group (the group moves with it)", async () => {
+      await makeGroup('Solo', ['b.txt'], 'Green');
+      await vscode.dragTab('b.txt', { after: 'd.txt' });
+      await vscode.idle(800);
+      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'c.txt', 'd.txt', 'b.txt']);
+      assert.strictEqual(await groupOf('b.txt'), 'Solo');
     });
 
     test('dragging a tab out of its group removes it from the group', async () => {

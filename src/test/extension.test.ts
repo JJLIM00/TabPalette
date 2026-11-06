@@ -175,6 +175,15 @@ suite('TabPalette in a real VS Code window', () => {
       assert.deepStrictEqual(tabBar(), ['a.txt', 'c.txt', 'b.txt', 'd.txt']);
     });
 
+    test('several selected tabs next to each other, added to an existing group, all move next to the group (no split-off piece)', async () => {
+      const main = makeGroup('Main', 'blue', ['a.txt']);
+      answerPrompts({ pick: ['Main'] });
+      await run('tabPalette.addToGroup', fileUri('c.txt'), [fileUri('c.txt'), fileUri('d.txt')]);
+      await settle();
+      assert.deepStrictEqual(members(main), ['a.txt', 'c.txt', 'd.txt']);
+      assert.deepStrictEqual(tabBar(), ['a.txt', 'c.txt', 'd.txt', 'b.txt']);
+    });
+
     test('adding a tab to another group moves it out of its old group (one group per tab)', async () => {
       const main = makeGroup('Main', 'blue', ['a.txt', 'b.txt']);
       const work = makeGroup('Work', 'red', ['d.txt']);
@@ -230,6 +239,25 @@ suite('TabPalette in a real VS Code window', () => {
       await open('b.txt');
       await dragActiveTabTo(4);
       assert.strictEqual(groupNameOf('b.txt'), 'Solo');
+    });
+
+    test('dragging the last tab of a group into another group deletes the emptied group', async () => {
+      const solo = makeGroup('Solo', 'green', ['a.txt']);
+      makeGroup('Main', 'blue', ['c.txt', 'd.txt']);
+      await open('a.txt');
+      await dragActiveTabTo(3); // b c a d: between c and d
+      assert.deepStrictEqual(tabBar(), ['b.txt', 'c.txt', 'a.txt', 'd.txt']);
+      assert.strictEqual(groupNameOf('a.txt'), 'Main');
+      assert.strictEqual(group(solo), undefined, 'Solo had no tabs left');
+    });
+
+    test('dragging one of several tabs into another group keeps the old group', async () => {
+      const main = makeGroup('Main', 'grey', ['a.txt', 'b.txt']);
+      makeGroup('Work', 'blue', ['c.txt', 'd.txt']);
+      await open('b.txt');
+      await dragActiveTabTo(3); // a c b d: between c and d
+      assert.strictEqual(groupNameOf('b.txt'), 'Work');
+      assert.deepStrictEqual(members(main), ['a.txt']);
     });
 
     test('a file opened from inside a group opens in the group', async () => {
@@ -530,6 +558,88 @@ suite('TabPalette in a real VS Code window', () => {
       await waitFor('the group is collapsed', () => group(g)!.collapsed);
       chipAction('toggleCollapse', g.id);
       await waitFor('the group is expanded', () => !group(g)!.collapsed);
+    });
+
+    test('a tab dropped onto a group of one tab joins it (the tab bar reports the drop after the move)', async () => {
+      const solo = makeGroup('Solo', 'green', ['b.txt']);
+      await connectAsTabBar();
+      await open('d.txt');
+      await dragActiveTabTo(3); // a b d c: d right after the group's only tab
+      chipAction('joinOnDrop', solo.id, { row: 0, labels: ['d.txt'] });
+      await waitFor('d.txt joined Solo', () => groupNameOf('d.txt') === 'Solo');
+      assert.deepStrictEqual(members(solo), ['b.txt', 'd.txt']);
+    });
+
+    test('the drop report may arrive before VS Code moves the tab; it still joins, at the start of the group', async () => {
+      const solo = makeGroup('Solo', 'green', ['c.txt']);
+      await connectAsTabBar();
+      await open('a.txt');
+      chipAction('joinOnDrop', solo.id, { row: 0, labels: ['a.txt'] });
+      await dragActiveTabTo(2); // b a c d: a right in front of the group's only tab
+      await waitFor('a.txt joined Solo', () => groupNameOf('a.txt') === 'Solo');
+      assert.deepStrictEqual(members(solo), ['a.txt', 'c.txt']);
+    });
+
+    test('a drop report for a tab that never lands next to the group is ignored', async () => {
+      const solo = makeGroup('Solo', 'green', ['d.txt']);
+      await connectAsTabBar();
+      chipAction('joinOnDrop', solo.id, { row: 0, labels: ['a.txt'] });
+      chipAction('joinOnDrop', solo.id, { row: 'first', labels: ['c.txt'] });
+      await settle(1800);
+      assert.strictEqual(groupNameOf('a.txt'), undefined);
+      assert.deepStrictEqual(members(solo), ['d.txt'], 'c.txt is next to the group, but the report was malformed');
+    });
+
+    test("a group's last tab dropped outside the group leaves it, even though the tab order did not change", async () => {
+      const main = makeGroup('Main', 'blue', ['c.txt', 'd.txt']);
+      await connectAsTabBar();
+      chipAction('leaveOnDrop', main.id, { row: 0, labels: ['d.txt'] });
+      await waitFor('d.txt left Main', () => groupNameOf('d.txt') === undefined);
+      assert.deepStrictEqual(members(main), ['c.txt']);
+      assert.deepStrictEqual(tabBar(), ['a.txt', 'b.txt', 'c.txt', 'd.txt']);
+    });
+
+    test("a group's only tab dropped outside the group keeps its group", async () => {
+      const solo = makeGroup('Solo', 'green', ['d.txt']);
+      await connectAsTabBar();
+      chipAction('leaveOnDrop', solo.id, { row: 0, labels: ['d.txt'] });
+      await settle(600);
+      assert.deepStrictEqual(members(solo), ['d.txt']);
+    });
+
+    test('several selected tabs dropped onto a group all join it', async () => {
+      const solo = makeGroup('Solo', 'green', ['b.txt']);
+      await connectAsTabBar();
+      chipAction('joinOnDrop', solo.id, { row: 0, labels: ['c.txt', 'd.txt'] }); // a b c d: c and d right after the group
+      await waitFor('c.txt and d.txt joined Solo', () => groupNameOf('c.txt') === 'Solo' && groupNameOf('d.txt') === 'Solo');
+      assert.deepStrictEqual(members(solo), ['b.txt', 'c.txt', 'd.txt']);
+    });
+
+    test('several selected tabs dropped outside their group all leave it', async () => {
+      const main = makeGroup('Main', 'blue', ['a.txt', 'b.txt', 'c.txt']);
+      await connectAsTabBar();
+      chipAction('leaveOnDrop', main.id, { row: 0, labels: ['b.txt', 'c.txt'] });
+      await waitFor('b.txt and c.txt left Main', () => groupNameOf('b.txt') === undefined && groupNameOf('c.txt') === undefined);
+      assert.deepStrictEqual(members(main), ['a.txt']);
+    });
+
+    test('right-click on a selected tab: the tab bar reports the selection, and "Add Selected Tabs" uses all of it', async () => {
+      await connectAsTabBar();
+      ui!.send(JSON.stringify({ type: 'selection', row: 0, indexes: [1, 3] })); // b.txt and d.txt are selected
+      await settle(100);
+      await run('tabPalette.addSelectedToNewGroup', fileUri('d.txt'));
+      await waitFor('b.txt is grouped', () => !!api.store.groupOf(id('b.txt')));
+      const g = api.store.groupOf(id('b.txt'))!;
+      assert.deepStrictEqual(g.uris.map(nameOf), ['b.txt', 'd.txt']);
+    });
+
+    test('right-click on a tab outside the reported selection: only that tab is used', async () => {
+      await connectAsTabBar();
+      ui!.send(JSON.stringify({ type: 'selection', row: 0, indexes: [0, 1] })); // a.txt and b.txt are selected
+      await settle(100);
+      await run('tabPalette.addSelectedToNewGroup', fileUri('d.txt'));
+      await waitFor('d.txt is grouped', () => !!api.store.groupOf(id('d.txt')));
+      assert.deepStrictEqual(api.store.groupOf(id('d.txt'))!.uris.map(nameOf), ['d.txt']);
     });
 
     test('dropping a dragged chip moves the group; a malformed drop is ignored', async () => {

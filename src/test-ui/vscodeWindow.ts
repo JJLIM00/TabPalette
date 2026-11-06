@@ -19,6 +19,9 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const FIXTURES = path.join(ROOT, 'test-fixtures');
 const PATCH_SCRIPT = path.join(ROOT, 'resources', 'patch', 'tab-groups-patch.js');
 
+/** Where a dragged tab is dropped: left half of a tab, right half of a tab, a group's chip, or the empty end of the tab bar. */
+export type DropSpot = { before: string } | { after: string } | { onChip: string } | { end: true };
+
 /** What one tab in the tab bar looks like to the user. */
 export interface TabView {
   name: string;
@@ -121,6 +124,21 @@ export class VSCodeWindow {
   /** True when VS Code's workbench.html is back to the original. */
   isUnpatched(): boolean {
     return patchStatus(this.workbenchHtml, '') === 'unpatched';
+  }
+
+  /**
+   * Changes a user setting by editing the test profile's settings.json, like a user editing
+   * the file (VS Code picks up the change by itself). `undefined` removes the setting.
+   */
+  setUserSetting(key: string, value: unknown): void {
+    const file = path.join(this.profileDir, 'user', 'User', 'settings.json');
+    const settings = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+    if (value === undefined) {
+      delete settings[key];
+    } else {
+      settings[key] = value;
+    }
+    fs.writeFileSync(file, JSON.stringify(settings, null, 2));
   }
 
   /** First start: the extension asks to enable Chrome-style tab groups. Say yes. */
@@ -252,6 +270,17 @@ export class VSCodeWindow {
     await this.idle();
   }
 
+  /** Clicks a file in the Explorer view (opening the Explorer first if needed). */
+  async clickExplorerItem(name: string): Promise<void> {
+    const item = this.page.locator('.explorer-folders-view .monaco-list-row', { hasText: new RegExp(`^${escapeRegExp(name)}$`) }).first();
+    if (!(await item.isVisible())) {
+      await this.page.keyboard.press('Control+Shift+E');
+      await item.waitFor({ state: 'visible', timeout: 5000 });
+    }
+    await item.click();
+    await this.idle();
+  }
+
   /** Right-clicks a tab and picks an item from its context menu (use 'Tab Group > Remove Tab from Group' for a submenu). */
   async tabMenu(name: string, item: string): Promise<void> {
     await this.tabLocator(name).click({ button: 'right' });
@@ -289,21 +318,90 @@ export class VSCodeWindow {
     await this.idle();
   }
 
-  /** Drags a tab with the mouse and drops it on the left half of `before` (or right half of `after`). */
-  async dragTab(name: string, to: { before: string } | { after: string }): Promise<void> {
+  /**
+   * Drags a tab with the mouse and drops it: on the left half of tab `before`, the right half
+   * of tab `after`, or on a group's chip (`onChip`).
+   */
+  async dragTab(name: string, to: DropSpot): Promise<void> {
+    await this.startTabDrag(name, to);
+    await this.drop();
+  }
+
+  /** Like dragTab, but holds the tab over the drop spot with the mouse still down. */
+  async startTabDrag(name: string, to: DropSpot): Promise<void> {
     const from = await this.tabLocator(name).boundingBox();
-    const target = await this.tabLocator('before' in to ? to.before : to.after).boundingBox();
-    if (!from || !target) {
-      throw new Error('tab not found');
+    if (!from) {
+      throw new Error(`no tab named ${name}`);
     }
-    const x = 'before' in to ? target.x + target.width * 0.25 : target.x + target.width * 0.75;
-    const y = target.y + target.height / 2;
-    await this.page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    const y = from.y + from.height / 2;
+    await this.page.mouse.move(from.x + from.width / 2, y);
     await this.page.mouse.down();
     await this.page.mouse.move(from.x + from.width / 2 + 10, y, { steps: 3 });
-    await this.page.mouse.move(x, y, { steps: 12 });
+    await this.idle(200);
+    // Measure the drop spot only now: the tab bar may still shift (e.g. a chip that was just
+    // renamed gets its final width) until the drag is under way.
+    let x: number;
+    let y2: number;
+    if ('end' in to) {
+      // the empty part of the tab bar, after the last tab
+      const tabs = await this.page.locator('.editor-group-container.active .tabs-container > .tab').all();
+      const last = (await tabs[tabs.length - 1].boundingBox())!;
+      x = last.x + last.width + 60;
+      y2 = last.y + last.height / 2;
+    } else {
+      const target = await ('onChip' in to ? this.chipLocator(to.onChip) : this.tabLocator('before' in to ? to.before : to.after)).boundingBox();
+      if (!target) {
+        throw new Error('drop target not found');
+      }
+      x = 'after' in to ? target.x + target.width * 0.75 : 'before' in to ? target.x + target.width * 0.25 : target.x + target.width / 2;
+      y2 = target.y + target.height / 2;
+    }
+    await this.page.mouse.move(x, y2, { steps: 12 });
+    // Chromium can skip drag-over events when moves come quickly; a real user's mouse keeps
+    // sending them while it rests. Settle on the spot so the page sees the final position.
+    for (const dx of [1, 0]) {
+      await this.idle(100);
+      await this.page.mouse.move(x + dx, y2);
+    }
+    await this.idle(200);
+  }
+
+  /** Releases the mouse to finish a drag started with startTabDrag. */
+  async drop(): Promise<void> {
     await this.page.mouse.up();
     await this.idle(600);
+  }
+
+  /**
+   * While a tab is being dragged: where VS Code's drop marker (the vertical line) is drawn,
+   * as an x position, or null when no marker is shown.
+   */
+  dropMarkerX(): Promise<number | null> {
+    return this.page.evaluate(() => {
+      const right = document.querySelector('.tabs-container > .tab.drop-target-right');
+      if (right) {
+        return right.getBoundingClientRect().left + parseFloat(getComputedStyle(right, '::before').left);
+      }
+      const left = document.querySelector('.tabs-container > .tab.drop-target-left');
+      return left ? left.getBoundingClientRect().right : null;
+    });
+  }
+
+  /** While a tab is being dragged: the color of VS Code's drop line (CSS rgb), or null when none is shown. */
+  dropMarkerColor(): Promise<string | null> {
+    return this.page.evaluate(() => {
+      const right = document.querySelector('.tabs-container > .tab.drop-target-right');
+      if (right) {
+        return getComputedStyle(right, '::before').backgroundColor;
+      }
+      const left = document.querySelector('.tabs-container > .tab.drop-target-left');
+      return left ? getComputedStyle(left, '::after').backgroundColor : null;
+    });
+  }
+
+  /** Left edge of a group's chip, as an x position. */
+  async chipLeft(group: string): Promise<number> {
+    return (await this.chipLocator(group).boundingBox())!.x;
   }
 
   /** Drags a group chip with the mouse and drops it just before tab `before` (or after the last tab). */

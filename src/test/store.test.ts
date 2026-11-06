@@ -66,8 +66,34 @@ suite('Group store', () => {
       assert.deepStrictEqual(members(store, work.id), ['b.ts']);
 
       store.addUris(work.id, [A]);
-      assert.deepStrictEqual(members(store, main.id), []);
       assert.strictEqual(store.groupOf(A)!.id, work.id);
+    });
+
+    test('a group whose last tab moves to another group is deleted', () => {
+      const main = store.create('Main', 'grey', [A]);
+      const work = store.create('Work', 'blue', [B]);
+      store.addUris(work.id, [A]);
+      assert.strictEqual(store.get(main.id), undefined, 'Main had no tabs left');
+      assert.deepStrictEqual(members(store, work.id), ['b.ts', 'a.ts']);
+    });
+
+    test('a group whose last tab goes into a new group is deleted', () => {
+      const main = store.create('Main', 'grey', [A]);
+      const fresh = store.create('Fresh', 'blue', [A]);
+      assert.strictEqual(store.get(main.id), undefined);
+      assert.deepStrictEqual(members(store, fresh.id), ['a.ts']);
+    });
+
+    test('a group that still has tabs, a closed group, and other empty groups are not touched', () => {
+      const main = store.create('Main', 'grey', [A, B]);
+      const closed = store.create('Closed', 'red', [C]);
+      store.setClosed(closed.id, true);
+      const empty = store.create('Empty');
+      const work = store.create('Work', 'blue');
+      store.addUris(work.id, [A, C]);
+      assert.deepStrictEqual(members(store, main.id), ['b.ts']);
+      assert.ok(store.get(closed.id), 'a closed group is kept until it is reopened or deleted');
+      assert.ok(store.get(empty.id), 'only groups emptied by this move are deleted');
     });
 
     test('a tab can be inserted before a given member, or reordered inside its group', () => {

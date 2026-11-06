@@ -12,6 +12,67 @@ export class Layout {
   ) {}
 
   /**
+   * Chrome: tabs dropped onto one of a group's tabs join that group. The tab bar reports the
+   * drop (group, tab row, labels of the dragged tabs: one tab, or all selected tabs); VS Code
+   * moves the tabs on its own, and that move can reach us slightly before or after this
+   * report. So wait (briefly) until each tab sits next to the group, then add it at that spot.
+   * Returns how many tabs joined.
+   */
+  async joinDroppedTabs(groupId: string, rowIndex: number, labels: string[], timeoutMs = 1500): Promise<number> {
+    const start = Date.now();
+    const remaining = [...labels];
+    let joined = 0;
+    for (;;) {
+      const row = vscode.window.tabGroups.all[rowIndex];
+      if (!row || !this.store.get(groupId)) {
+        return joined;
+      }
+      const tabs = row.tabs.map((t) => ({ label: t.label, uri: tabUri(t)?.toString() ?? '' }));
+      const member = (u: string) => this.store.groupOf(u)?.id === groupId;
+      // Each joined tab can make the next one adjacent (several dropped side by side).
+      for (let progress = true; progress && remaining.length > 0; ) {
+        progress = false;
+        for (const [i, label] of remaining.entries()) {
+          const found = droppedNextToGroup(tabs, label, member);
+          if (found) {
+            this.store.addUris(groupId, [found.uri], found.before);
+            remaining.splice(i, 1);
+            joined++;
+            progress = true;
+            break;
+          }
+        }
+      }
+      if (remaining.length === 0 || Date.now() - start > timeoutMs) {
+        this.store.pruneEmpty();
+        return joined;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+
+  /**
+   * Chrome: grouped tabs dropped outside their group (on an ungrouped tab, a chip, or the
+   * empty end of the tab bar) leave the group, even if the tab order did not change, e.g. the
+   * group's last tab dragged a little to the right. Waits briefly for VS Code's own move
+   * first, so the tabs are judged where they landed. Returns how many tabs left.
+   */
+  async leaveDroppedTabs(groupId: string, rowIndex: number, labels: string[], settleMs = 300): Promise<number> {
+    await new Promise((r) => setTimeout(r, settleMs));
+    const row = vscode.window.tabGroups.all[rowIndex];
+    if (!row || !this.store.get(groupId)) {
+      return 0;
+    }
+    const tabs = row.tabs.map((t) => ({ label: t.label, uri: tabUri(t)?.toString() ?? '' }));
+    const leaving = droppedOutOfGroup(tabs, labels, (u) => this.store.groupOf(u)?.id === groupId);
+    if (leaving.length > 0) {
+      this.store.removeUris(leaving);
+      this.store.pruneEmpty();
+    }
+    return leaving.length;
+  }
+
+  /**
    * Chrome keeps a group's tabs together: move each of `uris` (tabs just added to their
    * group) next to the group's other tabs. Added to an existing group, a tab goes after
    * the group's last tab. When every tab of the group is new (a new group made from
@@ -24,6 +85,10 @@ export class Layout {
       const row = vscode.window.tabGroups.all.find((r) => order(r).includes(u));
       return row ? order(row).indexOf(u) : Number.MAX_SAFE_INTEGER;
     };
+    // Per group: tabs already in place. That is the group's existing tabs, plus each added
+    // tab once it sits next to one of them. Two added tabs next to each other, away from
+    // the group, are not "in place" (they would form a split-off piece of the group).
+    const placed = new Map<string, Set<string>>();
     let movedAny = false;
     await this.tracker.suspend(async () => {
       for (const uri of [...uris].sort((x, y) => position(x) - position(y))) {
@@ -31,27 +96,34 @@ export class Layout {
         if (!group) {
           continue;
         }
-        const member = (u: string) => this.store.groupOf(u)?.id === group.id;
-        const onlyNewTabs = group.uris.every((u) => added.has(u));
+        let inPlace = placed.get(group.id);
+        if (!inPlace) {
+          inPlace = new Set(group.uris.filter((u) => !added.has(u)));
+          placed.set(group.id, inPlace);
+        }
+        const isPlaced = (u: string) => inPlace.has(u);
         for (const row of vscode.window.tabGroups.all) {
           const current = order(row);
           const index = current.indexOf(uri);
           if (index < 0) {
             continue;
           }
-          if ((index > 0 && member(current[index - 1])) || (index < current.length - 1 && member(current[index + 1]))) {
-            continue; // already next to its group
-          }
           const rest = current.filter((_, i) => i !== index);
+          if (!rest.some(isPlaced)) {
+            inPlace.add(uri); // the group's first tab in this row: the others come to it
+            continue;
+          }
+          if ((index > 0 && isPlaced(current[index - 1])) || (index < current.length - 1 && isPlaced(current[index + 1]))) {
+            inPlace.add(uri); // already next to its group
+            continue;
+          }
           let last = -1;
           rest.forEach((u, i) => {
-            if (member(u) && (!onlyNewTabs || i < index)) {
+            if (isPlaced(u)) {
               last = i;
             }
           });
-          if (last < 0) {
-            continue; // the group's first tab in this row: the others come to it
-          }
+          inPlace.add(uri);
           await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(uri), {
             viewColumn: row.viewColumn,
             preview: false,
@@ -260,6 +332,69 @@ export function positionAfterGroup(row: readonly string[], uri: string, member: 
     }
   });
   return last + 1;
+}
+
+/**
+ * The tab named `label` that sits right next to the group (`member`) but is not in it yet:
+ * the tab just dropped onto the group. `before` is the group tab right after it, if any
+ * (so it is added at that spot, not at the end). Undefined while no such tab exists.
+ */
+export function droppedNextToGroup(
+  row: readonly { label: string; uri: string }[],
+  label: string,
+  member: (uri: string) => boolean,
+): { uri: string; before?: string } | undefined {
+  for (const [i, tab] of row.entries()) {
+    if (tab.label !== label || !tab.uri || member(tab.uri)) {
+      continue;
+    }
+    const prev = i > 0 && member(row[i - 1].uri);
+    const next = i < row.length - 1 && member(row[i + 1].uri);
+    if (prev || next) {
+      return { uri: tab.uri, before: next ? row[i + 1].uri : undefined };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Of the dragged tabs (`labels`: one tab, or all selected tabs), the grouped ones that were
+ * dropped outside their group and should leave it. None when the drag held all of the
+ * group's tabs (they carry the group along). A dragged tab stays when it landed between two
+ * group tabs that were not dragged (it is inside the group).
+ */
+export function droppedOutOfGroup(
+  row: readonly { label: string; uri: string }[],
+  labels: readonly string[],
+  member: (uri: string) => boolean,
+): string[] {
+  const dragged = new Set<number>();
+  for (const label of labels) {
+    const index = row.findIndex((t, i) => !dragged.has(i) && t.label === label && !!t.uri && member(t.uri));
+    if (index >= 0) {
+      dragged.add(index);
+    }
+  }
+  const stays = (i: number) => member(row[i].uri) && !dragged.has(i);
+  if (dragged.size === 0 || !row.some((_, i) => stays(i))) {
+    return [];
+  }
+  // Nearest tab on each side that was not dragged along.
+  const neighbor = (i: number, step: number) => {
+    for (let j = i + step; j >= 0 && j < row.length; j += step) {
+      if (!dragged.has(j)) {
+        return j;
+      }
+    }
+    return -1;
+  };
+  return [...dragged]
+    .filter((i) => {
+      const left = neighbor(i, -1);
+      const right = neighbor(i, 1);
+      return !(left >= 0 && right >= 0 && stays(left) && stays(right));
+    })
+    .map((i) => row[i].uri);
 }
 
 function activeLocation(): { uri: vscode.Uri; viewColumn: vscode.ViewColumn } | undefined {

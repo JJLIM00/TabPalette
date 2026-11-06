@@ -11,8 +11,9 @@
 - **Collapse with a click.** Click a chip to hide the group's tabs and click it again to bring them back.
 - **Edit in place.** Right-click a chip to rename the group, pick a color, or close, ungroup or delete it.
 - **Drag and drop.**
-  - Drop a tab between two tabs of a group to add it to the group.
-  - Drag a tab away from its group to remove it.
+  - Drop a tab onto any tab of a group to add it to the group, even a group with a single tab. While you hover, the drop line takes the group's color.
+  - Drop it on the group's chip instead to place it just before the group, outside it.
+  - Drop a grouped tab outside its group (on an ungrouped tab, a chip, or the empty end of the tab bar) to remove it, even right next to the group, e.g. the group's last tab dragged a little to the right. While you hover, the drop line turns red to warn that releasing will ungroup the tab. A group's only tab carries its group along instead.
   - Drag a chip to move the whole group.
 - **Groups stay together.** A tab added to a group moves next to it. A tab removed from the middle of a group moves just past the group, so the group never splits.
 - **Saved per workspace.** Groups come back when you reopen the folder, including closed groups.
@@ -23,7 +24,7 @@
 
 1. Install TabPalette. On first start it asks to **Enable** Chrome-style tab groups (see [How it draws on the tab bar](#how-it-draws-on-the-tab-bar)). Confirm, then reload the window.
 2. Right-click a tab and choose **Add Tab to New Group**. Type a name, pick a color, and press Enter.
-3. Right-click more tabs and choose **Add Tab to Group…**, or drag them in between the group's tabs.
+3. Right-click more tabs and choose **Add Tab to Group…**, or drag them onto the group's tabs.
 
 ![Add a tab to a group from the tab's context menu](images/add-to-group.png)
 
@@ -32,10 +33,10 @@
 | To… | Do this |
 |---|---|
 | Create a group | Right-click a tab → **Add Tab to New Group**. The group gets the next free color, and its editor opens so you can name it. |
-| Add a tab to a group | Right-click the tab → **Add Tab to Group…**, or drop it between two tabs of the group. |
+| Add a tab to a group | Right-click the tab → **Add Tab to Group…**, or drag it onto any tab of the group (the drop line turns the group's color). Dropping it on the chip places it before the group instead. |
 | Group several tabs at once | Ctrl/Shift+click the tabs, right-click → **Add Selected Tabs to Group…** |
 | Add a file from the Explorer | Right-click the file in the Explorer → **Add Tab to Group…** |
-| Remove a tab from its group | Right-click → **Tab Group → Remove Tab from Group**, or drag it away from the group. |
+| Remove a tab from its group | Right-click → **Tab Group → Remove Tab from Group**, or drag it out of the group: drop it on an ungrouped tab, a chip, or the empty end of the tab bar. |
 | Collapse or expand | Click the chip. Opening a hidden tab (Quick Open, Explorer…) expands its group. |
 | Rename or recolor | Right-click the chip. The name updates as you type. Enter or Esc closes the editor. |
 | Move a group | Drag its chip to a new place on the tab bar. |
@@ -58,16 +59,22 @@ Every action is also in the Command Palette under **Tab Groups:**.
 
 ### Custom colors
 
-The group colors are theme colors, so you can change them in your settings:
+The group colors, and the red "ungroup" drop line, are theme colors, so you can change them in your settings:
 
 ```jsonc
 "workbench.colorCustomizations": {
   "tabPalette.blue": "#4285F4",
-  "tabPalette.green": "#34A853"
+  "tabPalette.green": "#34A853",
+  "tabPalette.ungroupDropLine": "#FF9800"
 }
 ```
 
-Available ids: `tabPalette.grey`, `tabPalette.blue`, `tabPalette.red`, `tabPalette.yellow`, `tabPalette.green`, `tabPalette.pink`, `tabPalette.purple`, `tabPalette.cyan`, `tabPalette.orange`.
+| Id | What it colors |
+|---|---|
+| `tabPalette.grey`, `tabPalette.blue`, `tabPalette.red`, `tabPalette.yellow`, `tabPalette.green`, `tabPalette.pink`, `tabPalette.purple`, `tabPalette.cyan`, `tabPalette.orange` | The nine group colors: chips, group lines and the active tab's outline |
+| `tabPalette.ungroupDropLine` | The drop line while dragging a tab, when releasing it would take the tab out of its group (red by default) |
+
+You can also set a color for one theme only, e.g. `"[Default Dark Modern]": { "tabPalette.ungroupDropLine": "#FF9800" }`.
 
 ## How it draws on the tab bar
 
