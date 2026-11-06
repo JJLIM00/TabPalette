@@ -1,22 +1,36 @@
 import * as assert from 'assert';
-import { GROUP_COLORS, TabGroup, colorLabel, displayName, isGroupColor } from '../model';
+import { GROUP_COLORS, TabGroup, colorLabel, displayName, isGroupColor, themeColorId, toGroupColor } from '../model';
 
-const group = (name: string): TabGroup => ({ id: 'g', name, color: 'grey', uris: [], collapsed: false, closed: false });
+const group = (name: string): TabGroup => ({ id: 'g', name, color: 'color1', uris: [], collapsed: false, closed: false });
 
 suite('Group model', () => {
-  test("offers Chrome's nine group colors, in Chrome's order", () => {
-    assert.deepStrictEqual([...GROUP_COLORS], ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange']);
+  test('offers nine numbered color slots', () => {
+    assert.deepStrictEqual([...GROUP_COLORS], ['color1', 'color2', 'color3', 'color4', 'color5', 'color6', 'color7', 'color8', 'color9']);
   });
 
-  test('only those nine names count as group colors', () => {
-    assert.ok(isGroupColor('blue'));
-    assert.ok(!isGroupColor('Blue'));
-    assert.ok(!isGroupColor('magenta'));
+  test('only those nine slots count as group colors', () => {
+    assert.ok(isGroupColor('color2'));
+    assert.ok(!isGroupColor('color10'));
+    assert.ok(!isGroupColor('blue'));
     assert.ok(!isGroupColor(3));
   });
 
-  test('color names are shown capitalized', () => {
-    assert.strictEqual(colorLabel('orange'), 'Orange');
+  test('each slot is the theme color users can change: tabPalette.color1 … tabPalette.color9', () => {
+    assert.strictEqual(themeColorId('color1'), 'tabPalette.color1');
+    assert.strictEqual(themeColorId('color9'), 'tabPalette.color9');
+  });
+
+  test('slots are shown as "Color 1" … "Color 9" (a slot can be set to any color)', () => {
+    assert.strictEqual(colorLabel('color1'), 'Color 1');
+    assert.strictEqual(colorLabel('color9'), 'Color 9');
+  });
+
+  test('old saved color names (grey, blue …) are converted to the slot that defaults to that color', () => {
+    assert.strictEqual(toGroupColor('grey'), 'color1');
+    assert.strictEqual(toGroupColor('blue'), 'color2');
+    assert.strictEqual(toGroupColor('orange'), 'color9');
+    assert.strictEqual(toGroupColor('color4'), 'color4');
+    assert.strictEqual(toGroupColor('magenta'), undefined);
   });
 
   test('a group without a name is shown as "Unnamed group"', () => {

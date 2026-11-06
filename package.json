@@ -243,8 +243,8 @@
     ],
     "colors": [
       {
-        "id": "tabPalette.grey",
-        "description": "Tab group color: grey",
+        "id": "tabPalette.color1",
+        "description": "Tab group color 1 (chip, group line and active-tab outline). Default: Chrome grey.",
         "defaults": {
           "dark": "#DADCE0",
           "light": "#5F6368",
@@ -253,8 +253,8 @@
         }
       },
       {
-        "id": "tabPalette.blue",
-        "description": "Tab group color: blue",
+        "id": "tabPalette.color2",
+        "description": "Tab group color 2 (chip, group line and active-tab outline). Default: Chrome blue.",
         "defaults": {
           "dark": "#8AB4F8",
           "light": "#1A73E8",
@@ -263,8 +263,8 @@
         }
       },
       {
-        "id": "tabPalette.red",
-        "description": "Tab group color: red",
+        "id": "tabPalette.color3",
+        "description": "Tab group color 3 (chip, group line and active-tab outline). Default: Chrome red.",
         "defaults": {
           "dark": "#F28B82",
           "light": "#D93025",
@@ -273,8 +273,8 @@
         }
       },
       {
-        "id": "tabPalette.yellow",
-        "description": "Tab group color: yellow",
+        "id": "tabPalette.color4",
+        "description": "Tab group color 4 (chip, group line and active-tab outline). Default: Chrome yellow.",
         "defaults": {
           "dark": "#FDD663",
           "light": "#E37400",
@@ -283,8 +283,8 @@
         }
       },
       {
-        "id": "tabPalette.green",
-        "description": "Tab group color: green",
+        "id": "tabPalette.color5",
+        "description": "Tab group color 5 (chip, group line and active-tab outline). Default: Chrome green.",
         "defaults": {
           "dark": "#81C995",
           "light": "#1E8E3E",
@@ -293,8 +293,8 @@
         }
       },
       {
-        "id": "tabPalette.pink",
-        "description": "Tab group color: pink",
+        "id": "tabPalette.color6",
+        "description": "Tab group color 6 (chip, group line and active-tab outline). Default: Chrome pink.",
         "defaults": {
           "dark": "#FF8BCB",
           "light": "#D01884",
@@ -303,8 +303,8 @@
         }
       },
       {
-        "id": "tabPalette.purple",
-        "description": "Tab group color: purple",
+        "id": "tabPalette.color7",
+        "description": "Tab group color 7 (chip, group line and active-tab outline). Default: Chrome purple.",
         "defaults": {
           "dark": "#C58AF9",
           "light": "#9334E6",
@@ -313,8 +313,8 @@
         }
       },
       {
-        "id": "tabPalette.cyan",
-        "description": "Tab group color: cyan",
+        "id": "tabPalette.color8",
+        "description": "Tab group color 8 (chip, group line and active-tab outline). Default: Chrome cyan.",
         "defaults": {
           "dark": "#78D9EC",
           "light": "#007B83",
@@ -323,8 +323,8 @@
         }
       },
       {
-        "id": "tabPalette.orange",
-        "description": "Tab group color: orange",
+        "id": "tabPalette.color9",
+        "description": "Tab group color 9 (chip, group line and active-tab outline). Default: Chrome orange.",
         "defaults": {
           "dark": "#FCAD70",
           "light": "#C26401",

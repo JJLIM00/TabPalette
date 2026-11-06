@@ -141,7 +141,7 @@ suite('TabPalette in a real VS Code window', () => {
       answerPrompts({ type: 'Docs' });
       await run('tabPalette.addToNewGroup', fileUri('b.txt'));
       assert.strictEqual(groupNameOf('b.txt'), 'Docs');
-      assert.strictEqual(groupByName('Docs')!.color, 'grey');
+      assert.strictEqual(groupByName('Docs')!.color, 'color1');
     });
 
     test('a group may stay unnamed (Esc on the name prompt)', async () => {
@@ -158,7 +158,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('"Add Tab to Group…" lists New group and the open groups; picking one adds the tab next to that group', async () => {
-      const main = makeGroup('Main', 'blue', ['a.txt']);
+      const main = makeGroup('Main', 'color2', ['a.txt']);
       answerPrompts({ pick: ['Main'] });
       await run('tabPalette.addToGroup', fileUri('d.txt'));
       await settle();
@@ -176,7 +176,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('several selected tabs next to each other, added to an existing group, all move next to the group (no split-off piece)', async () => {
-      const main = makeGroup('Main', 'blue', ['a.txt']);
+      const main = makeGroup('Main', 'color2', ['a.txt']);
       answerPrompts({ pick: ['Main'] });
       await run('tabPalette.addToGroup', fileUri('c.txt'), [fileUri('c.txt'), fileUri('d.txt')]);
       await settle();
@@ -185,8 +185,8 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('adding a tab to another group moves it out of its old group (one group per tab)', async () => {
-      const main = makeGroup('Main', 'blue', ['a.txt', 'b.txt']);
-      const work = makeGroup('Work', 'red', ['d.txt']);
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
+      const work = makeGroup('Work', 'color3', ['d.txt']);
       answerPrompts({ pick: ['Work'] });
       await run('tabPalette.moveToGroup', fileUri('b.txt'));
       assert.deepStrictEqual(members(main), ['a.txt']);
@@ -210,7 +210,7 @@ suite('TabPalette in a real VS Code window', () => {
 
   suite('dragging tabs in the tab bar', () => {
     test('dropping a tab between two tabs of a group adds it to the group', async () => {
-      makeGroup('Main', 'blue', ['a.txt', 'b.txt']);
+      makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
       await open('d.txt');
       await dragActiveTabTo(2);
       assert.deepStrictEqual(tabBar(), ['a.txt', 'd.txt', 'b.txt', 'c.txt']);
@@ -218,7 +218,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('dragging a tab away from its group removes it from the group', async () => {
-      const main = makeGroup('Main', 'blue', ['a.txt', 'b.txt', 'c.txt']);
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt', 'c.txt']);
       await open('b.txt');
       await dragActiveTabTo(4);
       assert.deepStrictEqual(tabBar(), ['a.txt', 'c.txt', 'd.txt', 'b.txt']);
@@ -227,7 +227,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('moving a tab around inside its group keeps it in the group', async () => {
-      makeGroup('Main', 'blue', ['a.txt', 'b.txt', 'c.txt']);
+      makeGroup('Main', 'color2', ['a.txt', 'b.txt', 'c.txt']);
       await open('c.txt');
       await dragActiveTabTo(1);
       assert.deepStrictEqual(tabBar(), ['c.txt', 'a.txt', 'b.txt', 'd.txt']);
@@ -235,15 +235,15 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('the only tab of a group keeps its group wherever it is dragged', async () => {
-      makeGroup('Solo', 'green', ['b.txt']);
+      makeGroup('Solo', 'color5', ['b.txt']);
       await open('b.txt');
       await dragActiveTabTo(4);
       assert.strictEqual(groupNameOf('b.txt'), 'Solo');
     });
 
     test('dragging the last tab of a group into another group deletes the emptied group', async () => {
-      const solo = makeGroup('Solo', 'green', ['a.txt']);
-      makeGroup('Main', 'blue', ['c.txt', 'd.txt']);
+      const solo = makeGroup('Solo', 'color5', ['a.txt']);
+      makeGroup('Main', 'color2', ['c.txt', 'd.txt']);
       await open('a.txt');
       await dragActiveTabTo(3); // b c a d: between c and d
       assert.deepStrictEqual(tabBar(), ['b.txt', 'c.txt', 'a.txt', 'd.txt']);
@@ -252,8 +252,8 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('dragging one of several tabs into another group keeps the old group', async () => {
-      const main = makeGroup('Main', 'grey', ['a.txt', 'b.txt']);
-      makeGroup('Work', 'blue', ['c.txt', 'd.txt']);
+      const main = makeGroup('Main', 'color1', ['a.txt', 'b.txt']);
+      makeGroup('Work', 'color2', ['c.txt', 'd.txt']);
       await open('b.txt');
       await dragActiveTabTo(3); // a c b d: between c and d
       assert.strictEqual(groupNameOf('b.txt'), 'Work');
@@ -261,7 +261,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('a file opened from inside a group opens in the group', async () => {
-      makeGroup('Main', 'blue', ['a.txt', 'b.txt']);
+      makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
       await open('d.txt');
       await run('workbench.action.closeActiveEditor');
       await open('a.txt');
@@ -273,7 +273,7 @@ suite('TabPalette in a real VS Code window', () => {
 
   suite('removing and closing tabs', () => {
     test('a tab removed from the middle of a group moves just past it, so the group stays in one piece', async () => {
-      const main = makeGroup('Main', 'grey', ['a.txt', 'b.txt', 'c.txt']);
+      const main = makeGroup('Main', 'color1', ['a.txt', 'b.txt', 'c.txt']);
       await run('tabPalette.removeFromGroup', fileUri('b.txt'));
       await settle();
       assert.deepStrictEqual(tabBar(), ['a.txt', 'c.txt', 'b.txt', 'd.txt']);
@@ -281,7 +281,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('removing the last tab of a group removes the group', async () => {
-      const g = makeGroup('Main', 'red', ['b.txt']);
+      const g = makeGroup('Main', 'color3', ['b.txt']);
       await open('b.txt');
       await run('tabPalette.removeFromGroup');
       assert.strictEqual(groupNameOf('b.txt'), undefined);
@@ -289,7 +289,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('closing a tab takes it out of its group; closing the last one removes the group', async () => {
-      const g = makeGroup('Main', 'pink', ['a.txt', 'b.txt']);
+      const g = makeGroup('Main', 'color6', ['a.txt', 'b.txt']);
       await open('a.txt');
       await run('workbench.action.closeActiveEditor');
       await settle();
@@ -301,8 +301,8 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('a tab right-click acts on the clicked tab, not on the active tab', async () => {
-      const groupA = makeGroup('A', 'green', ['a.txt']);
-      const groupD = makeGroup('D', 'pink', ['d.txt']);
+      const groupA = makeGroup('A', 'color5', ['a.txt']);
+      const groupD = makeGroup('D', 'color6', ['d.txt']);
       await open('d.txt');
       await run('tabPalette.ungroup', fileUri('a.txt'), { groupId: 1 });
       assert.strictEqual(group(groupA), undefined);
@@ -312,7 +312,7 @@ suite('TabPalette in a real VS Code window', () => {
 
   suite('group actions', () => {
     test('collapsing hides the group (its tabs stay open) and switches to a tab outside it; expanding shows it again', async () => {
-      const g = makeGroup('Main', 'red', ['a.txt', 'b.txt']);
+      const g = makeGroup('Main', 'color3', ['a.txt', 'b.txt']);
       await open('b.txt');
       await run('tabPalette.toggleCollapse', g.id);
       await settle();
@@ -325,7 +325,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('opening a hidden tab (Quick Open, Explorer…) expands its collapsed group', async () => {
-      const g = makeGroup('Main', 'red', ['a.txt', 'b.txt']);
+      const g = makeGroup('Main', 'color3', ['a.txt', 'b.txt']);
       await run('tabPalette.toggleCollapse', g.id);
       await settle();
       await open('a.txt');
@@ -333,7 +333,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('"Close group" closes its tabs but keeps the group; reopening brings the tabs back', async () => {
-      const g = makeGroup('Main', 'cyan', ['a.txt', 'b.txt']);
+      const g = makeGroup('Main', 'color8', ['a.txt', 'b.txt']);
       await run('tabPalette.closeGroup', g.id);
       await waitFor('the tabs are closed', () => !isOpen('a.txt') && !isOpen('b.txt'));
       assert.strictEqual(group(g)!.closed, true);
@@ -345,7 +345,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('"Show Tab Groups" lists closed groups, and picking one reopens it', async () => {
-      const g = makeGroup('Later', 'yellow', ['c.txt']);
+      const g = makeGroup('Later', 'color4', ['c.txt']);
       await run('tabPalette.closeGroup', g.id);
       await waitFor('the tab is closed', () => !isOpen('c.txt'));
       answerPrompts({ pick: ['Later'] });
@@ -354,37 +354,37 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('"Ungroup" keeps the tabs open; "Delete group" closes them', async () => {
-      const one = makeGroup('One', 'grey', ['a.txt']);
+      const one = makeGroup('One', 'color1', ['a.txt']);
       await run('tabPalette.ungroup', one.id);
       assert.strictEqual(group(one), undefined);
       assert.ok(isOpen('a.txt'));
 
-      const two = makeGroup('Two', 'grey', ['b.txt']);
+      const two = makeGroup('Two', 'color1', ['b.txt']);
       await run('tabPalette.deleteGroup', two.id);
       await waitFor('the tab is closed', () => !isOpen('b.txt'));
       assert.strictEqual(group(two), undefined);
     });
 
     test('rename and color can be changed from the Command Palette', async () => {
-      const g = makeGroup('Main', 'grey', ['a.txt']);
+      const g = makeGroup('Main', 'color1', ['a.txt']);
       answerPrompts({ type: 'Renamed' });
       await run('tabPalette.renameGroup', g.id);
-      answerPrompts({ pick: ['Purple'] });
+      answerPrompts({ pick: ['Color 7'] });
       await run('tabPalette.changeColor', g.id);
       assert.strictEqual(group(g)!.name, 'Renamed');
-      assert.strictEqual(group(g)!.color, 'purple');
+      assert.strictEqual(group(g)!.color, 'color7');
     });
 
     test('"Edit Group…" asks for a name, then a color', async () => {
-      const g = makeGroup('Main', 'grey', ['a.txt']);
-      answerPrompts({ type: 'Edited', pick: ['Green'] });
+      const g = makeGroup('Main', 'color1', ['a.txt']);
+      answerPrompts({ type: 'Edited', pick: ['Color 5'] });
       await run('tabPalette.editGroup', g.id);
       assert.strictEqual(group(g)!.name, 'Edited');
-      assert.strictEqual(group(g)!.color, 'green');
+      assert.strictEqual(group(g)!.color, 'color5');
     });
 
     test('"New tab in group" opens the picked file inside the group', async () => {
-      const g = makeGroup('Main', 'blue', ['a.txt']);
+      const g = makeGroup('Main', 'color2', ['a.txt']);
       await open('d.txt');
       await run('workbench.action.closeActiveEditor');
       answerPrompts({ pick: ['d.txt'] });
@@ -395,8 +395,8 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('dragging a group chip moves the whole group, so groups can swap places', async () => {
-      const main = makeGroup('Main', 'grey', ['a.txt', 'b.txt']);
-      const work = makeGroup('Work', 'blue', ['c.txt', 'd.txt']);
+      const main = makeGroup('Main', 'color1', ['a.txt', 'b.txt']);
+      const work = makeGroup('Work', 'color2', ['c.txt', 'd.txt']);
       const row = vscode.window.tabGroups.all.indexOf(vscode.window.tabGroups.activeTabGroup);
 
       await api.layout.moveGroupTo(work.id, row, 0); // drop Work before the first tab
@@ -423,7 +423,7 @@ suite('TabPalette in a real VS Code window', () => {
 
     test('a renamed file stays in its group under its new name', async () => {
       await vscode.workspace.fs.writeFile(fileUri(tempName), Buffer.from('temp'));
-      const g = makeGroup('Main', 'blue', ['a.txt', tempName]);
+      const g = makeGroup('Main', 'color2', ['a.txt', tempName]);
       const edit = new vscode.WorkspaceEdit();
       edit.renameFile(fileUri(tempName), fileUri(renamedName));
       assert.ok(await vscode.workspace.applyEdit(edit));
@@ -433,7 +433,7 @@ suite('TabPalette in a real VS Code window', () => {
 
     test('a deleted file leaves its group', async () => {
       await vscode.workspace.fs.writeFile(fileUri(tempName), Buffer.from('temp'));
-      const g = makeGroup('Main', 'blue', ['a.txt', tempName]);
+      const g = makeGroup('Main', 'color2', ['a.txt', tempName]);
       const edit = new vscode.WorkspaceEdit();
       edit.deleteFile(fileUri(tempName));
       assert.ok(await vscode.workspace.applyEdit(edit));
@@ -514,9 +514,9 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('tells the tab bar which group each tab is in', async () => {
-      const g = makeGroup('Main', 'blue', ['a.txt', 'b.txt']);
+      const g = makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
       const state = await connectAsTabBar();
-      assert.deepStrictEqual(state.groups, [{ id: g.id, name: 'Main', color: 'blue', collapsed: false }]);
+      assert.deepStrictEqual(state.groups, [{ id: g.id, name: 'Main', color: 'color2', collapsed: false }]);
       const row = state.rows.find((r) => r.tabs.some((t) => t.label === 'a.txt'))!;
       assert.deepStrictEqual(
         row.tabs.map((t) => [t.label, t.group && 'Main']),
@@ -525,7 +525,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('sends a fresh state when a group changes', async () => {
-      const g = makeGroup('Main', 'blue', ['a.txt']);
+      const g = makeGroup('Main', 'color2', ['a.txt']);
       await connectAsTabBar();
       const update = nextMessage(ui!, 'state');
       api.store.rename(g.id, 'Work');
@@ -533,7 +533,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('closed groups are not drawn on the tab bar', async () => {
-      const g = makeGroup('Main', 'blue', ['a.txt']);
+      const g = makeGroup('Main', 'color2', ['a.txt']);
       await run('tabPalette.closeGroup', g.id);
       await waitFor('the group is closed', () => group(g)!.closed);
       const state = await connectAsTabBar();
@@ -541,18 +541,18 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('the group editor renames and recolors; unknown colors are ignored', async () => {
-      const g = makeGroup('Main', 'blue', ['a.txt']);
+      const g = makeGroup('Main', 'color2', ['a.txt']);
       await connectAsTabBar();
       chipAction('rename', g.id, 'Work');
-      chipAction('setColor', g.id, 'orange');
-      await waitFor('rename and color are applied', () => group(g)!.name === 'Work' && group(g)!.color === 'orange');
+      chipAction('setColor', g.id, 'color9');
+      await waitFor('rename and color are applied', () => group(g)!.name === 'Work' && group(g)!.color === 'color9');
       chipAction('setColor', g.id, 'not-a-color');
       await settle();
-      assert.strictEqual(group(g)!.color, 'orange');
+      assert.strictEqual(group(g)!.color, 'color9');
     });
 
     test('clicking a chip collapses the group; clicking again expands it', async () => {
-      const g = makeGroup('Main', 'blue', ['a.txt', 'b.txt']);
+      const g = makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
       await connectAsTabBar();
       chipAction('toggleCollapse', g.id);
       await waitFor('the group is collapsed', () => group(g)!.collapsed);
@@ -561,7 +561,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('a tab dropped onto a group of one tab joins it (the tab bar reports the drop after the move)', async () => {
-      const solo = makeGroup('Solo', 'green', ['b.txt']);
+      const solo = makeGroup('Solo', 'color5', ['b.txt']);
       await connectAsTabBar();
       await open('d.txt');
       await dragActiveTabTo(3); // a b d c: d right after the group's only tab
@@ -571,7 +571,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('the drop report may arrive before VS Code moves the tab; it still joins, at the start of the group', async () => {
-      const solo = makeGroup('Solo', 'green', ['c.txt']);
+      const solo = makeGroup('Solo', 'color5', ['c.txt']);
       await connectAsTabBar();
       await open('a.txt');
       chipAction('joinOnDrop', solo.id, { row: 0, labels: ['a.txt'] });
@@ -581,7 +581,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('a drop report for a tab that never lands next to the group is ignored', async () => {
-      const solo = makeGroup('Solo', 'green', ['d.txt']);
+      const solo = makeGroup('Solo', 'color5', ['d.txt']);
       await connectAsTabBar();
       chipAction('joinOnDrop', solo.id, { row: 0, labels: ['a.txt'] });
       chipAction('joinOnDrop', solo.id, { row: 'first', labels: ['c.txt'] });
@@ -591,7 +591,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test("a group's last tab dropped outside the group leaves it, even though the tab order did not change", async () => {
-      const main = makeGroup('Main', 'blue', ['c.txt', 'd.txt']);
+      const main = makeGroup('Main', 'color2', ['c.txt', 'd.txt']);
       await connectAsTabBar();
       chipAction('leaveOnDrop', main.id, { row: 0, labels: ['d.txt'] });
       await waitFor('d.txt left Main', () => groupNameOf('d.txt') === undefined);
@@ -600,7 +600,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test("a group's only tab dropped outside the group keeps its group", async () => {
-      const solo = makeGroup('Solo', 'green', ['d.txt']);
+      const solo = makeGroup('Solo', 'color5', ['d.txt']);
       await connectAsTabBar();
       chipAction('leaveOnDrop', solo.id, { row: 0, labels: ['d.txt'] });
       await settle(600);
@@ -608,7 +608,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('several selected tabs dropped onto a group all join it', async () => {
-      const solo = makeGroup('Solo', 'green', ['b.txt']);
+      const solo = makeGroup('Solo', 'color5', ['b.txt']);
       await connectAsTabBar();
       chipAction('joinOnDrop', solo.id, { row: 0, labels: ['c.txt', 'd.txt'] }); // a b c d: c and d right after the group
       await waitFor('c.txt and d.txt joined Solo', () => groupNameOf('c.txt') === 'Solo' && groupNameOf('d.txt') === 'Solo');
@@ -616,7 +616,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('several selected tabs dropped outside their group all leave it', async () => {
-      const main = makeGroup('Main', 'blue', ['a.txt', 'b.txt', 'c.txt']);
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt', 'c.txt']);
       await connectAsTabBar();
       chipAction('leaveOnDrop', main.id, { row: 0, labels: ['b.txt', 'c.txt'] });
       await waitFor('b.txt and c.txt left Main', () => groupNameOf('b.txt') === undefined && groupNameOf('c.txt') === undefined);
@@ -643,8 +643,8 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('dropping a dragged chip moves the group; a malformed drop is ignored', async () => {
-      makeGroup('Main', 'grey', ['a.txt', 'b.txt']);
-      const work = makeGroup('Work', 'blue', ['c.txt', 'd.txt']);
+      makeGroup('Main', 'color1', ['a.txt', 'b.txt']);
+      const work = makeGroup('Work', 'color2', ['c.txt', 'd.txt']);
       await connectAsTabBar();
       chipAction('moveGroup', work.id, { row: 0, index: 'first' });
       await settle(300);
@@ -655,9 +655,9 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('the group editor menu: Close group, Ungroup and Delete group', async () => {
-      const closing = makeGroup('Closing', 'grey', ['a.txt']);
-      const ungrouping = makeGroup('Ungrouping', 'blue', ['b.txt']);
-      const deleting = makeGroup('Deleting', 'red', ['c.txt']);
+      const closing = makeGroup('Closing', 'color1', ['a.txt']);
+      const ungrouping = makeGroup('Ungrouping', 'color2', ['b.txt']);
+      const deleting = makeGroup('Deleting', 'color3', ['c.txt']);
       await connectAsTabBar();
       chipAction('close', closing.id);
       chipAction('ungroup', ungrouping.id);
@@ -678,7 +678,7 @@ suite('TabPalette in a real VS Code window', () => {
     });
 
     test('"Edit Group…" opens the chip editor when the tab bar is connected', async () => {
-      const g = makeGroup('Main', 'blue', ['a.txt']);
+      const g = makeGroup('Main', 'color2', ['a.txt']);
       await connectAsTabBar();
       const edit = nextMessage(ui!, 'edit');
       await run('tabPalette.editGroup', g.id);

@@ -7,7 +7,7 @@
 ## Features
 
 - **Group chips and lines.** Each group shows a colored chip with its name in front of its tabs, and a line in the group's color runs under them. The active tab in a group gets Chrome's rounded outline.
-- **Nine Chrome colors.** Grey, blue, red, yellow, green, pink, purple, cyan and orange, tuned for light and dark themes.
+- **Nine colors, your palette.** Chrome's grey, blue, red, yellow, green, pink, purple, cyan and orange by default, tuned for light and dark themes. Each of the nine can be changed in your settings (see [Custom colors](#custom-colors)).
 - **Collapse with a click.** Click a chip to hide the group's tabs and click it again to bring them back.
 - **Edit in place.** Right-click a chip to rename the group, pick a color, or close, ungroup or delete it.
 - **Drag and drop.**
@@ -59,22 +59,32 @@ Every action is also in the Command Palette under **Tab Groups:**.
 
 ### Custom colors
 
-The group colors, and the red "ungroup" drop line, are theme colors, so you can change them in your settings:
+The nine group colors are numbered slots, **Color 1** to **Color 9**. By default they are Chrome's colors, but each slot can be set to any color you like, so you can make your own palette. Together with the red "ungroup" drop line, they are theme colors that you change in your settings:
 
 ```jsonc
 "workbench.colorCustomizations": {
-  "tabPalette.blue": "#4285F4",
-  "tabPalette.green": "#34A853",
+  "tabPalette.color1": "#9E9E9E",
+  "tabPalette.color2": "#4285F4",
   "tabPalette.ungroupDropLine": "#FF9800"
 }
 ```
 
-| Id | What it colors |
-|---|---|
-| `tabPalette.grey`, `tabPalette.blue`, `tabPalette.red`, `tabPalette.yellow`, `tabPalette.green`, `tabPalette.pink`, `tabPalette.purple`, `tabPalette.cyan`, `tabPalette.orange` | The nine group colors: chips, group lines and the active tab's outline |
-| `tabPalette.ungroupDropLine` | The drop line while dragging a tab, when releasing it would take the tab out of its group (red by default) |
+| Id | Default (Chrome color) | Used for |
+|---|---|---|
+| `tabPalette.color1` | grey | Color 1 |
+| `tabPalette.color2` | blue | Color 2 |
+| `tabPalette.color3` | red | Color 3 |
+| `tabPalette.color4` | yellow | Color 4 |
+| `tabPalette.color5` | green | Color 5 |
+| `tabPalette.color6` | pink | Color 6 |
+| `tabPalette.color7` | purple | Color 7 |
+| `tabPalette.color8` | cyan | Color 8 |
+| `tabPalette.color9` | orange | Color 9 |
+| `tabPalette.ungroupDropLine` | red | The drop line while dragging a tab, when releasing it would take the tab out of its group |
 
-You can also set a color for one theme only, e.g. `"[Default Dark Modern]": { "tabPalette.ungroupDropLine": "#FF9800" }`.
+A group color applies everywhere the group shows: its chip, its group line, the active tab's outline, the swatch in the group editor, and the dots in the Command Palette pickers. New groups take the next unused slot, in order.
+
+You can also set colors for one theme only, e.g. `"[Default Dark Modern]": { "tabPalette.color3": "#E53935" }`.
 
 ## How it draws on the tab bar
 
@@ -107,7 +117,7 @@ pnpm run test:ui    # UI tests: drives a real VS Code window with the mouse and 
 pnpm run vsix       # build a .vsix
 ```
 
-`pnpm run test:ui` uses every feature the way a person does: right-click menus, the group editor, clicking and dragging chips, dragging tabs, and the keyboard shortcuts. It then checks what is on screen. It patches only the test copy of VS Code in `.vscode-test`, restores it afterwards, and uses a temporary profile. Don't use the mouse or keyboard while it runs.
+`pnpm run test:ui` uses every feature the way a person does: right-click menus, the group editor, clicking and dragging chips, dragging tabs, and the keyboard shortcuts. It then checks what is on screen. It patches only the test copy of VS Code in `.vscode-test`, restores it afterwards, and uses a temporary profile. Don't use the mouse or keyboard while it runs. When a test fails, a screenshot of the window is saved to `out/ui-failures/`.
 
 Press **F5** to start an Extension Development Host with the `test-fixtures` folder open. That window runs your installed VS Code, so **Enable** there patches your real installation. Run **Disable** to undo it.
 

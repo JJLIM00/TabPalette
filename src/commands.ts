@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { Bridge, UiAction } from './bridge';
+import { colorIconFactory } from './colorIcons';
 import { Layout } from './layout';
 import { GROUP_COLORS, GroupColor, TabGroup, colorLabel, displayName, isGroupColor } from './model';
 import { GroupStore } from './store';
@@ -18,10 +19,8 @@ export interface CommandDeps {
 
 export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps): (action: UiAction) => Promise<void> {
   const { store, guard, layout } = deps;
-  const colorIcon = (color: GroupColor) => ({
-    light: vscode.Uri.joinPath(ctx.extensionUri, 'resources', 'colors', `${color}-light.svg`),
-    dark: vscode.Uri.joinPath(ctx.extensionUri, 'resources', 'colors', `${color}-dark.svg`),
-  });
+  /** A dot in the group color for the pickers; follows the user's workbench.colorCustomizations. */
+  const colorIcon = colorIconFactory(ctx);
 
   // ---------- prompts (fallbacks when the in-tab-bar editor is not available) ----------
 

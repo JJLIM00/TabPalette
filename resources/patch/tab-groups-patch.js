@@ -23,7 +23,8 @@
   var P = (window.__tabGroupsPatch = { connected: false, state: null });
 
   var PREFIX = 'tab-groups-bridge:';
-  var COLORS = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange'];
+  // Color slots: theme colors tabPalette.color1 … color9 (Chrome's colors by default; users can change them).
+  var COLORS = ['color1', 'color2', 'color3', 'color4', 'color5', 'color6', 'color7', 'color8', 'color9'];
   var SHORTCUT_CLOSE = navigator.platform.indexOf('Mac') === 0 ? '⌥⇧⌘W' : 'Ctrl+Alt+Shift+W';
 
   // ---------------------------------------------------------------- connection
@@ -204,14 +205,15 @@
     if (openEditorFor && !groups[openEditorFor]) {
       closeEditor();
     }
-    // Open the editor bubble the extension asked for, once its chip is on screen.
+    // Open the editor bubble the extension asked for, once its chip is on screen. The chip can
+    // take a moment: the tab bar may still be catching up with tabs VS Code just moved.
     if (pendingEdit) {
       var chip = document.querySelector('.tg-chip[data-gid="' + pendingEdit.gid + '"]');
       if (chip) {
         var gid = pendingEdit.gid;
         pendingEdit = null;
         openEditor(gid, chip);
-      } else if (++pendingEdit.tries > 20) {
+      } else if (++pendingEdit.tries > 60) {
         pendingEdit = null;
       } else {
         setTimeout(schedule, 100);
@@ -700,10 +702,14 @@
     COLORS.forEach(function (c) {
       var b = el('button', 'tg-color');
       b.type = 'button';
-      b.title = c[0].toUpperCase() + c.slice(1);
+      b.title = 'Color ' + c.slice('color'.length);
       b.setAttribute('aria-label', b.title);
       b.style.setProperty('--c', 'var(--vscode-tabPalette-' + c + ')');
       toggle(b, 'tg-selected', c === g.color);
+      // A click must not move focus to the swatch: no focus ring, and typing keeps going to the name.
+      b.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+      });
       b.addEventListener('click', function () {
         Array.prototype.forEach.call(swatches.children, function (s) {
           toggle(s, 'tg-selected', s === b);
@@ -857,7 +863,9 @@
     '.tg-popup .tg-colors { display: flex; justify-content: space-between; padding: 14px 16px 12px; }',
     '.tg-popup .tg-color { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: none; cursor: pointer; background: var(--c); }',
     '.tg-popup .tg-color.tg-selected { box-shadow: 0 0 0 2px var(--vscode-menu-background, #1f1f1f), 0 0 0 4px var(--c); }',
-    '.tg-popup .tg-color:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 3px; }',
+    /* no focus ring after a mouse click (VS Code outlines every focused button); keyboard focus (Tab) still shows one */
+    '.monaco-workbench .tg-popup .tg-color:focus:not(:focus-visible) { outline: none !important; }',
+    '.monaco-workbench .tg-popup .tg-color:focus-visible { outline: 2px solid var(--vscode-focusBorder) !important; outline-offset: 3px !important; }',
     '.tg-popup .tg-sep { height: 1px; margin: 6px 0; background: var(--vscode-menu-separatorBackground, var(--vscode-widget-border, rgba(128,128,128,.35))); }',
     '.tg-popup .tg-item { display: flex; align-items: center; gap: 14px; height: 40px; padding: 0 20px; cursor: pointer; outline: none; }',
     '.tg-popup .tg-item:hover, .tg-popup .tg-item:focus { background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground)); color: var(--vscode-menu-selectionForeground, inherit); }',

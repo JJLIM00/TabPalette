@@ -45,15 +45,28 @@ export interface ChipView {
   isDot: boolean;
 }
 
-/** Chrome color name (as shown in the group editor) → CSS color used in the dark theme. */
+/**
+ * The tests name the nine color slots by their default Chrome color, to stay readable:
+ * 'Grey' = tabPalette.color1 (shown as "Color 1" in the group editor), 'Blue' = color2, …
+ */
+const CHROME_NAMES = ['Grey', 'Blue', 'Red', 'Yellow', 'Green', 'Pink', 'Purple', 'Cyan', 'Orange'];
+
+/** Group editor swatch title ("Color 1" …) for a Chrome color name ('Grey' …). */
+const swatchTitle = (chromeName: string) => `Color ${CHROME_NAMES.indexOf(chromeName) + 1}`;
+
+/**
+ * Default dark-theme CSS color of each slot, by Chrome name ('Grey' … 'Orange'), plus the other
+ * theme colors by id ('UngroupDropLine'), read from package.json.
+ */
 export const COLORS: Record<string, string> = (() => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const colors: Record<string, string> = {};
   for (const c of pkg.contributes.colors as { id: string; defaults: { dark: string } }[]) {
-    const name = c.id.replace('tabPalette.', '');
+    const id = c.id.replace('tabPalette.', '');
     const hex = c.defaults.dark.replace('#', '');
     const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
-    colors[name[0].toUpperCase() + name.slice(1)] = `rgb(${r}, ${g}, ${b})`;
+    const slot = /^color(\d)$/.exec(id);
+    colors[slot ? CHROME_NAMES[+slot[1] - 1] : id[0].toUpperCase() + id.slice(1)] = `rgb(${r}, ${g}, ${b})`;
   }
   return colors;
 })();
@@ -88,6 +101,8 @@ export class VSCodeWindow {
         'git.openRepositoryInParentFolders': 'never',
         'chat.commandCenter.enabled': false,
         'workbench.tips.enabled': false,
+        // Keep pickers open if another window on the desktop briefly takes focus during a run.
+        'workbench.quickOpen.closeOnFocusLost': false,
       }),
     );
     const app = await _electron.launch({
@@ -119,6 +134,19 @@ export class VSCodeWindow {
     await this.app.close().catch(() => undefined);
     removePatch(this.workbenchHtml);
     fs.rmSync(this.profileDir, { recursive: true, force: true });
+  }
+
+  /**
+   * Brings the test window to the front. Popups such as the group editor close when the
+   * window loses focus, so each test starts with the window focused.
+   */
+  async focus(): Promise<void> {
+    await this.app.evaluate(({ BrowserWindow }) => {
+      const w = BrowserWindow.getAllWindows()[0];
+      w.show();
+      w.focus();
+    });
+    await this.page.bringToFront();
   }
 
   /** True when VS Code's workbench.html is back to the original. */
@@ -216,15 +244,19 @@ export class VSCodeWindow {
     return this.page.locator('.tg-popup').isVisible();
   }
 
-  /** The color whose swatch is marked as selected in the group editor. */
-  selectedSwatch(): Promise<{ color: string | null; hasCenterDot: boolean }> {
-    return this.page.evaluate(() => {
-      const swatch = document.querySelector('.tg-popup .tg-color.tg-selected') as HTMLElement | null;
-      return {
-        color: swatch?.title ?? null,
-        hasCenterDot: !!swatch && getComputedStyle(swatch).backgroundImage !== 'none',
-      };
+  /** The color (Chrome name, e.g. 'Purple') whose swatch is marked as selected in the group editor. */
+  async selectedSwatch(): Promise<{ color: string | null; hasCenterDot: boolean }> {
+    const swatch = await this.page.evaluate(() => {
+      const el = document.querySelector('.tg-popup .tg-color.tg-selected') as HTMLElement | null;
+      return { title: el?.title ?? null, hasCenterDot: !!el && getComputedStyle(el).backgroundImage !== 'none' };
     });
+    const slot = swatch.title ? /^Color (\d)$/.exec(swatch.title) : null;
+    return { color: slot ? CHROME_NAMES[+slot[1] - 1] : swatch.title, hasCenterDot: swatch.hasCenterDot };
+  }
+
+  /** Tooltips of the nine swatches in the open group editor, left to right. */
+  swatchTitles(): Promise<string[]> {
+    return this.page.evaluate(() => [...document.querySelectorAll('.tg-popup .tg-color')].map((b) => (b as HTMLElement).title));
   }
 
   // ------------------------------------------------------------------ mouse and keyboard
@@ -299,9 +331,9 @@ export class VSCodeWindow {
     await this.page.waitForSelector('.tg-popup');
   }
 
-  /** In the open group editor: clicks a color swatch, e.g. 'Orange'. */
+  /** In the open group editor: clicks a color swatch by its default Chrome color, e.g. 'Orange' (= "Color 9"). */
   async pickColor(color: string): Promise<void> {
-    await this.page.click(`.tg-popup .tg-color[title="${color}"]`);
+    await this.page.click(`.tg-popup .tg-color[title="${swatchTitle(color)}"]`);
     await this.idle();
   }
 
@@ -435,10 +467,14 @@ export class VSCodeWindow {
 
   /** Reloads the window, like Developer: Reload Window, and waits until the tab bar is connected again. */
   async reload(): Promise<void> {
-    await this.page.evaluate(() => window.__tabGroupsPatch && (window.__tabGroupsPatch.connected = false));
+    // Wait for the new page to load, not the old one that is still on screen when the command runs.
+    const loaded = this.page.waitForEvent('load', { timeout: 90_000 });
     await this.runCommand('Developer: Reload Window');
-    await this.page.waitForSelector('.monaco-workbench', { timeout: 60_000 });
-    await this.waitUntil('the tab bar is connected again', () => this.page.evaluate(() => !!window.__tabGroupsPatch?.connected), 60_000);
+    await loaded;
+    await this.page.waitForSelector('.monaco-workbench', { timeout: 90_000 });
+    // While the page is still being replaced, a check can throw; that just means "not yet".
+    const connected = () => this.page.evaluate(() => !!window.__tabGroupsPatch?.connected).catch(() => false);
+    await this.waitUntil('the tab bar is connected again', connected, 90_000);
     await this.dismissNotifications();
     await this.idle(1000);
   }
@@ -452,11 +488,46 @@ export class VSCodeWindow {
     );
   }
 
-  /** Clicks an item in an open quick pick by its label. */
+  /**
+   * Clicks an item in an open quick pick by its label. A click that comes right after the
+   * picker opens can be ignored; then the picker still shows the same items, so click again.
+   * (The picker may also be replaced by the next prompt, e.g. a group list after a command.)
+   */
   async pickFromList(label: string): Promise<void> {
     const row = this.page.locator('.quick-input-list .monaco-list-row', { hasText: label }).first();
-    await row.click();
+    await row.waitFor({ state: 'visible', timeout: 10_000 });
+    const items = () =>
+      this.page.evaluate(() => {
+        const widget = document.querySelector('.quick-input-widget') as HTMLElement | null;
+        if (!widget || widget.style.display === 'none' || widget.offsetParent === null) {
+          return '(closed)';
+        }
+        return [...widget.querySelectorAll('.quick-input-list .monaco-list-row')].map((r) => r.getAttribute('aria-label')).join('|');
+      });
+    const before = await items();
+    await row.hover();
+    await this.idle(150);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await row.click().catch(() => undefined);
+      const changed = await this.waitUntil('the picker reacts', async () => (await items()) !== before, 1500).then(
+        () => true,
+        () => false,
+      );
+      if (changed) {
+        break;
+      }
+    }
     await this.idle();
+  }
+
+  /** In an open quick pick: the color of the dot icon in front of the item `label` (from its SVG image). */
+  pickerDotColor(label: string): Promise<string | null> {
+    return this.page.evaluate((l) => {
+      const row = [...document.querySelectorAll('.quick-input-list .monaco-list-row')].find((r) => (r.getAttribute('aria-label') ?? '').startsWith(l));
+      const icon = row?.querySelector('.quick-input-list-icon') as HTMLElement | null;
+      const m = /base64,([^"')]+)/.exec(icon?.style.backgroundImage ?? '');
+      return m ? (/fill="([^"]+)"/.exec(atob(m[1]))?.[1] ?? null) : null;
+    }, label);
   }
 
   // ------------------------------------------------------------------ waiting
@@ -500,11 +571,18 @@ export class VSCodeWindow {
         has: this.page.locator('.action-label', { hasText: new RegExp(`^${escapeRegExp(label)}$`) }),
       }).last();
       await item.waitFor({ state: 'visible', timeout: 5000 });
-      if (i < steps.length - 1) {
-        await item.hover();
-        await this.idle(500);
-      } else {
-        await item.click();
+      await item.hover(); // like a user: move onto the item first
+      await this.idle(i < steps.length - 1 ? 500 : 150);
+      if (i === steps.length - 1) {
+        // VS Code's menus ignore a click that comes too soon after they open. If the menu is
+        // still open after the click, it was ignored: click again.
+        const menu = this.page.locator('.context-view .monaco-menu').first(); // with a submenu open there are two
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await item.click({ timeout: 3000 }).catch(() => undefined); // gone already = the previous click worked
+          if (await menu.waitFor({ state: 'hidden', timeout: 1500 }).then(() => true, () => false)) {
+            break;
+          }
+        }
       }
     }
     await this.idle();

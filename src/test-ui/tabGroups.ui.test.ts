@@ -4,9 +4,14 @@
  * the result is checked on screen (chips, colors, group lines, hidden tabs, tab order).
  *
  * Run with `pnpm run test:ui`. Every test starts with four tabs open: a.txt b.txt c.txt d.txt.
+ * When a test fails, a screenshot of the window is saved to out/ui-failures/.
  */
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
 import { COLORS, VSCodeWindow } from './vscodeWindow';
+
+const FAILURE_SHOTS = path.resolve(__dirname, '..', 'ui-failures');
 
 suite('TabPalette — used like a person would', function () {
   this.timeout(60_000);
@@ -21,7 +26,16 @@ suite('TabPalette — used like a person would', function () {
     await vscode?.close();
   });
 
+  teardown(async function () {
+    if (this.currentTest?.state === 'failed') {
+      fs.mkdirSync(FAILURE_SHOTS, { recursive: true });
+      const name = this.currentTest.title.replace(/[^\w]+/g, '-').slice(0, 80);
+      await vscode.page.screenshot({ path: path.join(FAILURE_SHOTS, `${name}.png`) }).catch(() => undefined);
+    }
+  });
+
   setup(async () => {
+    await vscode.focus();
     await vscode.closeAllTabs();
     for (const file of ['a.txt', 'b.txt', 'c.txt', 'd.txt']) {
       await vscode.open(file);
@@ -207,7 +221,7 @@ suite('TabPalette — used like a person would', function () {
       assert.strictEqual((await vscode.tab('d.txt')).lineColor, null, 'no line under a tab outside the group');
     });
 
-    test('all nine Chrome colors can be picked', async () => {
+    test('all nine colors can be picked; by default they are Chrome\'s colors', async () => {
       await makeGroup('Main', ['a.txt']);
       await vscode.openGroupEditor('Main');
       for (const color of ['Grey', 'Blue', 'Red', 'Yellow', 'Green', 'Pink', 'Purple', 'Cyan', 'Orange']) {
@@ -216,10 +230,65 @@ suite('TabPalette — used like a person would', function () {
       }
     });
 
+    test('the swatches are named "Color 1" … "Color 9" (each can be set to any color)', async () => {
+      await makeGroup('Main', ['a.txt']);
+      await vscode.openGroupEditor('Main');
+      assert.deepStrictEqual(await vscode.swatchTitles(), ['Color 1', 'Color 2', 'Color 3', 'Color 4', 'Color 5', 'Color 6', 'Color 7', 'Color 8', 'Color 9']);
+    });
+
+    test('a color slot can be changed in settings (tabPalette.color2): chips, lines and swatch follow it', async () => {
+      vscode.setUserSetting('workbench.colorCustomizations', { 'tabPalette.color2': '#00ff00' });
+      try {
+        await vscode.idle(1500); // VS Code picks up the settings file change
+        await makeGroup('Main', ['a.txt', 'b.txt'], 'Blue'); // slot 2
+        await vscode.clickTab('d.txt');
+        assert.strictEqual((await vscode.chip('Main'))!.color, 'rgb(0, 255, 0)', 'chip');
+        assert.strictEqual((await vscode.tab('a.txt')).lineColor, 'rgb(0, 255, 0)', 'group line');
+
+        await vscode.press('Control+Alt+T'); // Show Tab Groups: the dot in front of the group
+        await vscode.waitUntil('the group list shows Main', async () => (await vscode.pickerDotColor('Main')) !== null);
+        assert.strictEqual(await vscode.pickerDotColor('Main'), '#00ff00', 'picker dot');
+        await vscode.press('Escape');
+      } finally {
+        vscode.setUserSetting('workbench.colorCustomizations', undefined);
+        await vscode.idle(1500);
+      }
+    });
+
+    test('the dots in the Command Palette pickers show each group\'s color', async () => {
+      await makeGroup('Main', ['a.txt'], 'Grey');
+      await makeGroup('Work', ['b.txt'], 'Blue');
+      await vscode.press('Control+Alt+T');
+      await vscode.waitUntil('the group list is shown', async () => (await vscode.pickerDotColor('Work')) !== null);
+      assert.strictEqual((await vscode.pickerDotColor('Main'))?.toUpperCase(), '#DADCE0', 'Color 1 (grey by default)');
+      assert.strictEqual((await vscode.pickerDotColor('Work'))?.toUpperCase(), '#8AB4F8', 'Color 2 (blue by default)');
+      await vscode.press('Escape');
+    });
+
     test('the selected color shows a ring only, with no dot in the middle', async () => {
       await makeGroup('Main', ['a.txt'], 'Purple');
       await vscode.openGroupEditor('Main');
       assert.deepStrictEqual(await vscode.selectedSwatch(), { color: 'Purple', hasCenterDot: false });
+    });
+
+    test('clicking a color shows no focus border around it, and typing still goes to the name', async () => {
+      await makeGroup('Main', ['a.txt']);
+      await vscode.openGroupEditor('Main');
+      await vscode.pickColor('Green');
+      const after = await vscode.page.evaluate(() => {
+        const swatch = document.querySelector('.tg-popup .tg-color.tg-selected') as HTMLElement;
+        const style = getComputedStyle(swatch);
+        return {
+          outline: style.outlineStyle === 'none' || parseFloat(style.outlineWidth) === 0 ? 'none' : `${style.outlineWidth} ${style.outlineStyle}`,
+          focused: document.activeElement?.className ?? '',
+        };
+      });
+      assert.strictEqual(after.outline, 'none', 'no focus ring on the clicked swatch');
+      assert.strictEqual(after.focused, 'tg-name', 'the name box keeps the focus');
+      await vscode.press('End'); // the name is selected when the editor opens
+      await vscode.type(' 2');
+      await vscode.press('Enter');
+      assert.ok(await vscode.chip('Main 2'), 'typing after picking a color still renames the group');
     });
 
     test('the active tab of a group gets the rounded outline; other tabs do not', async () => {
@@ -526,7 +595,8 @@ suite('TabPalette — used like a person would', function () {
   // ------------------------------------------------------------------ saved per workspace
 
   suite('saved per workspace', () => {
-    test('groups, names, colors and collapsed state come back after reloading the window', async () => {
+    test('groups, names, colors and collapsed state come back after reloading the window', async function () {
+      this.timeout(150_000); // a reload restarts all extensions, which can take a while on a busy machine
       await makeGroup('Main', ['a.txt', 'b.txt'], 'Pink');
       await makeGroup('Work', ['c.txt'], 'Yellow');
       await vscode.clickTab('d.txt');
