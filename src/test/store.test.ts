@@ -196,17 +196,5 @@ suite('Group store', () => {
         { id: 'g2', name: '', color: 'color1', uris: [B], collapsed: false, closed: false },
       ]);
     });
-
-    test('groups saved with the old color names (grey, blue …) keep their colors', () => {
-      const storage = new FakeStorage();
-      storage.data.set(STORAGE_KEY, [
-        { id: 'g1', name: 'One', color: 'blue', uris: [A] },
-        { id: 'g2', name: 'Two', color: 'orange', uris: [B] },
-      ]);
-      assert.deepStrictEqual(
-        new GroupStore(storage).all().map((g) => g.color),
-        ['color2', 'color9'],
-      );
-    });
   });
 });

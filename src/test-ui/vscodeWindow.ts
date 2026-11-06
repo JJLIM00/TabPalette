@@ -155,18 +155,29 @@ export class VSCodeWindow {
   }
 
   /**
-   * Changes a user setting by editing the test profile's settings.json, like a user editing
-   * the file (VS Code picks up the change by itself). `undefined` removes the setting.
+   * Sets `workbench.colorCustomizations` by editing the test profile's settings.json, like a
+   * user editing the file, and waits until VS Code has applied it (the theme colors changed).
+   * `undefined` removes the setting again.
    */
-  setUserSetting(key: string, value: unknown): void {
+  async setColorCustomizations(colors: Record<string, string> | undefined): Promise<void> {
     const file = path.join(this.profileDir, 'user', 'User', 'settings.json');
     const settings = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
-    if (value === undefined) {
-      delete settings[key];
+    const before = (settings['workbench.colorCustomizations'] ?? {}) as Record<string, string>;
+    if (colors === undefined) {
+      delete settings['workbench.colorCustomizations'];
     } else {
-      settings[key] = value;
+      settings['workbench.colorCustomizations'] = colors;
     }
     fs.writeFileSync(file, JSON.stringify(settings, null, 2));
+    const themeColor = (id: string) =>
+      this.page.evaluate(
+        (name) => getComputedStyle(document.querySelector('.monaco-workbench')!).getPropertyValue(name).trim().toLowerCase(),
+        `--vscode-${id.replace('.', '-')}`,
+      );
+    for (const [id, value] of Object.entries(colors ?? before)) {
+      const wanted = value.toLowerCase();
+      await this.waitUntil(`VS Code applies the color setting for ${id}`, async () => ((await themeColor(id)) === wanted) === (colors !== undefined), 15_000);
+    }
   }
 
   /** First start: the extension asks to enable Chrome-style tab groups. Say yes. */
@@ -289,17 +300,17 @@ export class VSCodeWindow {
 
   async press(keys: string): Promise<void> {
     await this.page.keyboard.press(keys);
-    await this.idle();
+    await this.settled();
   }
 
   async type(text: string): Promise<void> {
-    await this.page.keyboard.type(text, { delay: 20 });
-    await this.idle();
+    await this.page.keyboard.type(text, { delay: 10 });
+    await this.settled(300); // the group editor sends the name 120 ms after the last key
   }
 
   async clickTab(name: string, modifiers: ('Control' | 'Shift')[] = []): Promise<void> {
     await this.tabLocator(name).click({ modifiers });
-    await this.idle();
+    await this.settled();
   }
 
   /** Clicks a file in the Explorer view (opening the Explorer first if needed). */
@@ -310,7 +321,7 @@ export class VSCodeWindow {
       await item.waitFor({ state: 'visible', timeout: 5000 });
     }
     await item.click();
-    await this.idle();
+    await this.settled();
   }
 
   /** Right-clicks a tab and picks an item from its context menu (use 'Tab Group > Remove Tab from Group' for a submenu). */
@@ -322,7 +333,7 @@ export class VSCodeWindow {
   /** Clicks a group chip (collapses or expands the group). */
   async clickChip(group: string): Promise<void> {
     await this.chipLocator(group).click();
-    await this.idle();
+    await this.settled();
   }
 
   /** Right-clicks a group chip, which opens the group editor. */
@@ -334,7 +345,7 @@ export class VSCodeWindow {
   /** In the open group editor: clicks a color swatch by its default Chrome color, e.g. 'Orange' (= "Color 9"). */
   async pickColor(color: string): Promise<void> {
     await this.page.click(`.tg-popup .tg-color[title="${swatchTitle(color)}"]`);
-    await this.idle();
+    await this.settled();
   }
 
   /** In the open group editor: replaces the name, typing it like a user. */
@@ -347,7 +358,7 @@ export class VSCodeWindow {
   /** In the open group editor: clicks a menu item such as 'Close group'. */
   async groupEditorItem(text: string): Promise<void> {
     await this.page.locator('.tg-popup .tg-item', { hasText: text }).click();
-    await this.idle();
+    await this.settled();
   }
 
   /**
@@ -369,7 +380,7 @@ export class VSCodeWindow {
     await this.page.mouse.move(from.x + from.width / 2, y);
     await this.page.mouse.down();
     await this.page.mouse.move(from.x + from.width / 2 + 10, y, { steps: 3 });
-    await this.idle(200);
+    await this.idle(150);
     // Measure the drop spot only now: the tab bar may still shift (e.g. a chip that was just
     // renamed gets its final width) until the drag is under way.
     let x: number;
@@ -392,16 +403,17 @@ export class VSCodeWindow {
     // Chromium can skip drag-over events when moves come quickly; a real user's mouse keeps
     // sending them while it rests. Settle on the spot so the page sees the final position.
     for (const dx of [1, 0]) {
-      await this.idle(100);
+      await this.idle(60);
       await this.page.mouse.move(x + dx, y2);
     }
-    await this.idle(200);
+    await this.idle(120);
   }
 
   /** Releases the mouse to finish a drag started with startTabDrag. */
   async drop(): Promise<void> {
     await this.page.mouse.up();
-    await this.idle(600);
+    // A tab dropped out of its group leaves it 300 ms later (the extension lets VS Code move it first).
+    await this.settled(400);
   }
 
   /**
@@ -462,7 +474,7 @@ export class VSCodeWindow {
     await this.page.mouse.move(from.x + from.width / 2 + 12, y, { steps: 4 });
     await this.page.mouse.move(x, y, { steps: 15 });
     await this.page.mouse.up();
-    await this.idle(1500);
+    await this.settled(400); // the extension moves the group's tabs one by one
   }
 
   /** Reloads the window, like Developer: Reload Window, and waits until the tab bar is connected again. */
@@ -476,15 +488,18 @@ export class VSCodeWindow {
     const connected = () => this.page.evaluate(() => !!window.__tabGroupsPatch?.connected).catch(() => false);
     await this.waitUntil('the tab bar is connected again', connected, 90_000);
     await this.dismissNotifications();
-    await this.idle(1000);
+    await this.settled(500);
   }
 
-  /** Closes every tab, which also clears every open group, so the next test starts clean. */
+  /** Closes every tab (Ctrl+K Ctrl+W), which also clears every open group, so the next test starts clean. */
   async closeAllTabs(): Promise<void> {
     await this.page.keyboard.press('Escape');
-    await this.runCommand('View: Close All Editors');
-    await this.waitUntil('all tabs are closed and no groups are left', async () =>
-      (await this.tabs()).length === 0 && (await this.page.evaluate(() => window.__tabGroupsPatch?.state?.groups.length ?? 0)) === 0,
+    await this.page.keyboard.press('Control+K');
+    await this.page.keyboard.press('Control+W');
+    await this.waitUntil('all tabs are closed and no groups are left', () =>
+      this.page.evaluate(
+        () => document.querySelectorAll('.tabs-container > .tab').length === 0 && (window.__tabGroupsPatch?.state?.groups.length ?? 0) === 0,
+      ),
     );
   }
 
@@ -506,10 +521,9 @@ export class VSCodeWindow {
       });
     const before = await items();
     await row.hover();
-    await this.idle(150);
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await row.click().catch(() => undefined);
-      const changed = await this.waitUntil('the picker reacts', async () => (await items()) !== before, 1500).then(
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await row.click({ timeout: 3000 }).catch(() => undefined);
+      const changed = await this.waitUntil('the picker reacts', async () => (await items()) !== before, 700).then(
         () => true,
         () => false,
       );
@@ -517,7 +531,7 @@ export class VSCodeWindow {
         break;
       }
     }
-    await this.idle();
+    await this.settled();
   }
 
   /** In an open quick pick: the color of the dot icon in front of the item `label` (from its SVG image). */
@@ -542,12 +556,47 @@ export class VSCodeWindow {
       if (Date.now() - start > timeout) {
         throw new Error(`Timed out waiting until ${what}`);
       }
-      await this.page.waitForTimeout(100);
+      await this.page.waitForTimeout(25);
     }
   }
 
-  /** Gives VS Code and the extension time to react (tab events, state sync, redraw). */
-  idle(ms = 400): Promise<void> {
+  /**
+   * Waits until VS Code and the extension have finished reacting to the last action: the tab
+   * bar, the groups the extension sent, and any open menu, picker or group editor stay the
+   * same for `quietMs`. Returns as soon as that is the case (gives up waiting after `maxMs`).
+   */
+  async settled(quietMs = 200, maxMs = 4000): Promise<void> {
+    const snapshot = () =>
+      this.page
+        .evaluate(() => {
+          const tabs = [...document.querySelectorAll('.tabs-container > .tab')]
+            .map((t) => `${t.className}:${t.querySelector('.label-name')?.textContent}`)
+            .join('|');
+          const quickInput = document.querySelector('.quick-input-widget') as HTMLElement | null;
+          return [
+            JSON.stringify(window.__tabGroupsPatch?.state ?? null),
+            tabs,
+            document.querySelectorAll('.tg-popup, .context-view .monaco-menu, .tg-chip').length,
+            quickInput?.style.display,
+            document.querySelectorAll('.quick-input-list .monaco-list-row').length,
+          ].join('#');
+        })
+        .catch(() => 'reloading');
+    const start = Date.now();
+    let last = await snapshot();
+    let quietSince = Date.now();
+    while (Date.now() - quietSince < quietMs && Date.now() - start < maxMs) {
+      await this.page.waitForTimeout(25);
+      const now = await snapshot();
+      if (now !== last) {
+        last = now;
+        quietSince = Date.now();
+      }
+    }
+  }
+
+  /** Waits a fixed time: only for mouse moves during a drag, which need real time between them. */
+  idle(ms: number): Promise<void> {
     return this.page.waitForTimeout(ms);
   }
 
@@ -571,21 +620,24 @@ export class VSCodeWindow {
         has: this.page.locator('.action-label', { hasText: new RegExp(`^${escapeRegExp(label)}$`) }),
       }).last();
       await item.waitFor({ state: 'visible', timeout: 5000 });
-      await item.hover(); // like a user: move onto the item first
-      await this.idle(i < steps.length - 1 ? 500 : 150);
+      await item.hover(); // like a user: move onto the item first (this opens a submenu)
       if (i === steps.length - 1) {
         // VS Code's menus ignore a click that comes too soon after they open. If the menu is
-        // still open after the click, it was ignored: click again.
+        // still open after the click, it was ignored: click again. A submenu that just opened
+        // ignores clicks a little longer, so wait for it first.
+        if (steps.length > 1) {
+          await this.idle(150);
+        }
         const menu = this.page.locator('.context-view .monaco-menu').first(); // with a submenu open there are two
-        for (let attempt = 0; attempt < 3; attempt++) {
+        for (let attempt = 0; attempt < 4; attempt++) {
           await item.click({ timeout: 3000 }).catch(() => undefined); // gone already = the previous click worked
-          if (await menu.waitFor({ state: 'hidden', timeout: 1500 }).then(() => true, () => false)) {
+          if (await menu.waitFor({ state: 'hidden', timeout: 700 }).then(() => true, () => false)) {
             break;
           }
         }
       }
     }
-    await this.idle();
+    await this.settled();
   }
 
   private async dismissNotifications(): Promise<void> {

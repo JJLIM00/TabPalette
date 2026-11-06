@@ -9,11 +9,12 @@
 - **Group chips and lines.** Each group shows a colored chip with its name in front of its tabs, and a line in the group's color runs under them. The active tab in a group gets Chrome's rounded outline.
 - **Nine colors, your palette.** Chrome's grey, blue, red, yellow, green, pink, purple, cyan and orange by default, tuned for light and dark themes. Each of the nine can be changed in your settings (see [Custom colors](#custom-colors)).
 - **Collapse with a click.** Click a chip to hide the group's tabs and click it again to bring them back.
-- **Edit in place.** Right-click a chip to rename the group, pick a color, or close, ungroup or delete it.
+- **Edit in place.** Right-click a chip to rename the group, pick a color, open a new tab in it, move it to a new window, or close, ungroup or delete it.
 - **Drag and drop.**
   - Drop a tab onto any tab of a group to add it to the group, even a group with a single tab. While you hover, the drop line takes the group's color.
   - Drop it on the group's chip instead to place it just before the group, outside it.
   - Drop a grouped tab outside its group (on an ungrouped tab, a chip, or the empty end of the tab bar) to remove it, even right next to the group, e.g. the group's last tab dragged a little to the right. While you hover, the drop line turns red to warn that releasing will ungroup the tab. A group's only tab carries its group along instead.
+  - Several selected tabs (Ctrl/Shift+click) are dragged together: they all join, or all leave, the group.
   - Drag a chip to move the whole group.
 - **Groups stay together.** A tab added to a group moves next to it. A tab removed from the middle of a group moves just past the group, so the group never splits.
 - **Saved per workspace.** Groups come back when you reopen the folder, including closed groups.
@@ -34,7 +35,7 @@
 |---|---|
 | Create a group | Right-click a tab → **Add Tab to New Group**. The group gets the next free color, and its editor opens so you can name it. |
 | Add a tab to a group | Right-click the tab → **Add Tab to Group…**, or drag it onto any tab of the group (the drop line turns the group's color). Dropping it on the chip places it before the group instead. |
-| Group several tabs at once | Ctrl/Shift+click the tabs, right-click → **Add Selected Tabs to Group…** |
+| Group several tabs at once | Ctrl/Shift+click the tabs, then right-click → **Add Selected Tabs to Group…** (or **…to New Group**), or drag them onto a group. |
 | Add a file from the Explorer | Right-click the file in the Explorer → **Add Tab to Group…** |
 | Remove a tab from its group | Right-click → **Tab Group → Remove Tab from Group**, or drag it out of the group: drop it on an ungrouped tab, a chip, or the empty end of the tab bar. |
 | Collapse or expand | Click the chip. Opening a hidden tab (Quick Open, Explorer…) expands its group. |
@@ -113,7 +114,7 @@ Requires [pnpm](https://pnpm.io).
 pnpm install
 pnpm run compile    # type-check and bundle to dist/
 pnpm test           # unit and integration tests in a VS Code test host
-pnpm run test:ui    # UI tests: drives a real VS Code window with the mouse and keyboard (about 4 minutes)
+pnpm run test:ui    # UI tests: drives a real VS Code window with the mouse and keyboard (about 3 minutes)
 pnpm run vsix       # build a .vsix
 ```
 

@@ -6,7 +6,7 @@ import { Layout } from './layout';
 import { MembershipTracker } from './membership';
 import { registerPatchCommands } from './patchCommands';
 import { GroupStore } from './store';
-import { registerFileSync } from './tabSync';
+import { registerFileSync } from './fileSync';
 import { CloseGuard } from './tabs';
 
 /** Returned from activate() so the integration tests can reach the extension's state. */

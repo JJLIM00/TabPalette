@@ -25,7 +25,7 @@ let api: TabGroupsApi;
 /** Opens a file as a normal (pinned) tab and makes it active. */
 async function open(name: string): Promise<void> {
   await vscode.commands.executeCommand('vscode.open', fileUri(name), { preview: false });
-  await settle();
+  await waitFor(`${name} is the active tab`, () => activeTab() === name);
 }
 
 /** File names of the tabs in the active tab row, left to right. */
@@ -52,8 +52,9 @@ const groupByName = (name: string) => api.store.all().find((g) => g.name === nam
 
 /** Drags the active tab to a 1-based position in its row, like a mouse drag in the tab bar. */
 async function dragActiveTabTo(position: number): Promise<void> {
+  const name = activeTab();
   await vscode.commands.executeCommand('moveActiveEditor', { to: 'position', by: 'tab', value: position });
-  await settle();
+  await waitFor(`${name} is at position ${position}`, () => tabBar()[position - 1] === name);
 }
 
 function run(command: string, ...args: unknown[]): Thenable<unknown> {
@@ -70,7 +71,7 @@ async function waitFor(what: string, check: () => boolean, ms = 3000): Promise<v
     if (Date.now() - start > ms) {
       throw new Error(`Timed out waiting until ${what}`);
     }
-    await settle(50);
+    await settle(10);
   }
 }
 
@@ -123,7 +124,7 @@ suite('TabPalette in a real VS Code window', () => {
   teardown(async () => {
     restorePrompts();
     await run('workbench.action.closeAllEditors');
-    await settle();
+    await waitFor('all tabs are closed', () => openUris().size === 0);
     for (const g of [...api.store.all()]) {
       api.store.remove(g.id);
     }
@@ -583,9 +584,9 @@ suite('TabPalette in a real VS Code window', () => {
     test('a drop report for a tab that never lands next to the group is ignored', async () => {
       const solo = makeGroup('Solo', 'color5', ['d.txt']);
       await connectAsTabBar();
-      chipAction('joinOnDrop', solo.id, { row: 0, labels: ['a.txt'] });
       chipAction('joinOnDrop', solo.id, { row: 'first', labels: ['c.txt'] });
-      await settle(1800);
+      // The extension waits a little for VS Code to move the tab, then gives up.
+      assert.strictEqual(await api.layout.joinDroppedTabs(solo.id, 0, ['a.txt'], 200), 0);
       assert.strictEqual(groupNameOf('a.txt'), undefined);
       assert.deepStrictEqual(members(solo), ['d.txt'], 'c.txt is next to the group, but the report was malformed');
     });
@@ -601,9 +602,7 @@ suite('TabPalette in a real VS Code window', () => {
 
     test("a group's only tab dropped outside the group keeps its group", async () => {
       const solo = makeGroup('Solo', 'color5', ['d.txt']);
-      await connectAsTabBar();
-      chipAction('leaveOnDrop', solo.id, { row: 0, labels: ['d.txt'] });
-      await settle(600);
+      assert.strictEqual(await api.layout.leaveDroppedTabs(solo.id, 0, ['d.txt'], 0), 0, 'no tab leaves');
       assert.deepStrictEqual(members(solo), ['d.txt']);
     });
 

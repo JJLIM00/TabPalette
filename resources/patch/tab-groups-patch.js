@@ -6,8 +6,9 @@
  *   - a colored group chip (name, or a dot when unnamed) before the group's first tab,
  *   - a group-colored line under the group's tabs, and a rounded outline around the active one,
  *   - click chip = collapse/expand, drag chip = move the whole group,
- *   - right-click chip = group editor (name, 9 colors, New tab / Move / Close / Ungroup / Delete).
- * Joining or leaving a group by dragging tabs is handled by the extension (it watches tab moves).
+ *   - right-click chip = group editor (name, 9 colors, New tab / Move / Close / Ungroup / Delete),
+ *   - while a tab is dragged, a drop line in the group's color (joins) or the "ungroup" color
+ *     (leaves); on drop it tells the extension, which updates the group once VS Code has moved the tab.
  *
  * Data comes from this window's extension host over a local WebSocket; the port and
  * a secret token are read from a hidden status bar item the extension adds to this
@@ -447,10 +448,8 @@
         return;
       }
       var tab = e.target && e.target.closest ? e.target.closest('.tabs-container > .tab') : null;
-      tabDrag = tab ? { tab: tab, tabs: selectedWith(tab), join: null } : null;
-      if (tabDrag) {
-        tabDrag.labels = tabDrag.tabs.map(labelOf);
-      }
+      var tabs = tab ? selectedWith(tab) : null;
+      tabDrag = tab ? { tab: tab, tabs: tabs, labels: tabs.map(labelOf), join: null, leave: null } : null;
     },
     true,
   );

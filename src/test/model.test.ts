@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { GROUP_COLORS, TabGroup, colorLabel, displayName, isGroupColor, themeColorId, toGroupColor } from '../model';
+import { GROUP_COLORS, TabGroup, colorLabel, displayName, isGroupColor, themeColorId } from '../model';
 
 const group = (name: string): TabGroup => ({ id: 'g', name, color: 'color1', uris: [], collapsed: false, closed: false });
 
@@ -25,13 +25,6 @@ suite('Group model', () => {
     assert.strictEqual(colorLabel('color9'), 'Color 9');
   });
 
-  test('old saved color names (grey, blue …) are converted to the slot that defaults to that color', () => {
-    assert.strictEqual(toGroupColor('grey'), 'color1');
-    assert.strictEqual(toGroupColor('blue'), 'color2');
-    assert.strictEqual(toGroupColor('orange'), 'color9');
-    assert.strictEqual(toGroupColor('color4'), 'color4');
-    assert.strictEqual(toGroupColor('magenta'), undefined);
-  });
 
   test('a group without a name is shown as "Unnamed group"', () => {
     assert.strictEqual(displayName(group('Main')), 'Main');

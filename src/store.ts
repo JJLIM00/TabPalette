@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { GROUP_COLORS, GroupColor, TabGroup, toGroupColor } from './model';
+import { GROUP_COLORS, GroupColor, TabGroup, isGroupColor } from './model';
 
 /** The subset of `vscode.Memento` the store needs (lets tests pass a fake). */
 export interface StateStorage {
@@ -212,7 +212,7 @@ export class GroupStore implements vscode.Disposable {
       groups.push({
         id: item.id,
         name: typeof item.name === 'string' ? item.name : '',
-        color: toGroupColor(item.color) ?? 'color1',
+        color: isGroupColor(item.color) ? item.color : 'color1',
         uris,
         collapsed: item.collapsed === true,
         closed: item.closed === true,

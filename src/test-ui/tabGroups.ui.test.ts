@@ -188,7 +188,7 @@ suite('TabPalette — used like a person would', function () {
     test('closing a tab takes it out of its group; closing its last tab removes the group and its chip', async () => {
       await makeGroup('Main', ['a.txt', 'b.txt']);
       await vscode.tabMenu('a.txt', 'Close');
-      await vscode.idle();
+      await vscode.settled();
       assert.ok(await vscode.chip('Main'), 'the group is still there with b.txt');
       await vscode.tabMenu('b.txt', 'Close');
       await vscode.waitUntil('the chip is gone', async () => (await vscode.chips()).length === 0);
@@ -237,9 +237,8 @@ suite('TabPalette — used like a person would', function () {
     });
 
     test('a color slot can be changed in settings (tabPalette.color2): chips, lines and swatch follow it', async () => {
-      vscode.setUserSetting('workbench.colorCustomizations', { 'tabPalette.color2': '#00ff00' });
+      await vscode.setColorCustomizations({ 'tabPalette.color2': '#00ff00' });
       try {
-        await vscode.idle(1500); // VS Code picks up the settings file change
         await makeGroup('Main', ['a.txt', 'b.txt'], 'Blue'); // slot 2
         await vscode.clickTab('d.txt');
         assert.strictEqual((await vscode.chip('Main'))!.color, 'rgb(0, 255, 0)', 'chip');
@@ -250,8 +249,7 @@ suite('TabPalette — used like a person would', function () {
         assert.strictEqual(await vscode.pickerDotColor('Main'), '#00ff00', 'picker dot');
         await vscode.press('Escape');
       } finally {
-        vscode.setUserSetting('workbench.colorCustomizations', undefined);
-        await vscode.idle(1500);
+        await vscode.setColorCustomizations(undefined);
       }
     });
 
@@ -361,7 +359,7 @@ suite('TabPalette — used like a person would', function () {
       assert.ok(marker! < chip, `drop line (x=${marker}) is left of the Tab chip (x=${chip}), not between the chip and its tab`);
       assert.notStrictEqual(color, COLORS.Blue, 'the normal drop line, not the "join" color');
       assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'b.txt', 'd.txt', 'c.txt']);
-      await vscode.idle(1000);
+      await vscode.settled(400);
       assert.strictEqual(await groupOf('d.txt'), null);
       assert.strictEqual(await groupOf('c.txt'), 'Tab');
     });
@@ -438,17 +436,15 @@ suite('TabPalette — used like a person would', function () {
     });
 
     test('the "ungroup" drop line color can be changed in settings', async () => {
-      vscode.setUserSetting('workbench.colorCustomizations', { 'tabPalette.ungroupDropLine': '#00ff00' });
+      await vscode.setColorCustomizations({ 'tabPalette.ungroupDropLine': '#00ff00' });
       try {
-        await vscode.idle(1500); // VS Code picks up the settings file change
         await makeGroup('Main', ['a.txt', 'b.txt']);
         await vscode.startTabDrag('b.txt', { before: 'c.txt' });
         const color = await vscode.dropMarkerColor();
         await vscode.drop();
         assert.strictEqual(color, 'rgb(0, 255, 0)');
       } finally {
-        vscode.setUserSetting('workbench.colorCustomizations', undefined);
-        await vscode.idle(1500);
+        await vscode.setColorCustomizations(undefined);
       }
     });
 
@@ -490,7 +486,7 @@ suite('TabPalette — used like a person would', function () {
     test("a group's only tab dragged out keeps its group (the group moves with it)", async () => {
       await makeGroup('Solo', ['b.txt'], 'Green');
       await vscode.dragTab('b.txt', { after: 'd.txt' });
-      await vscode.idle(800);
+      await vscode.settled(400);
       assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'c.txt', 'd.txt', 'b.txt']);
       assert.strictEqual(await groupOf('b.txt'), 'Solo');
     });
