@@ -661,6 +661,20 @@ suite('TabPalette — used like a person would', function () {
     });
   });
 
+  // ------------------------------------------------------------------ reloading the tab bar script
+
+  suite('reloading the tab bar script', () => {
+    test('"Reload Tab Bar Script" writes the script again and reloads the window; groups are still there', async function () {
+      this.timeout(150_000); // a reload restarts all extensions
+      await makeGroup('Main', ['a.txt', 'b.txt'], 'Green');
+      await vscode.reload('Tab Groups: Reload Tab Bar Script');
+      await vscode.waitUntil('the chip is drawn again', async () => !!(await vscode.chip('Main')));
+      assert.strictEqual((await vscode.chip('Main'))!.color, COLORS.Green);
+      assert.strictEqual(await groupOf('b.txt'), 'Main');
+      assert.deepStrictEqual(vscode.installedScripts(), [vscode.expectedScript()], 'one script file, named after its content');
+    });
+  });
+
   // ------------------------------------------------------------------ turning it off (runs last)
 
   suite('turning the tab bar patch off', () => {

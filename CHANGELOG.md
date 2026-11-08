@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Fixed: after an update, the tab bar could keep running the old script even after reloading the window. Each version of the script now has a file name of its own, so VS Code always loads the current one.
+- New command **Tab Groups: Reload Tab Bar Script**: writes the script again and reloads the window.
+
 ## 0.1.2
 
 - Fixed: groups were no longer drawn when pinned tabs are shown on a separate row (`workbench.editor.pinnedTabsOnSeparateRow`).

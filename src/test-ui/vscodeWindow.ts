@@ -13,7 +13,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ElectronApplication, Page, _electron } from 'playwright-core';
-import { applyPatch, findWorkbenchHtml, patchStatus, removePatch } from '../patch';
+import { applyPatch, findWorkbenchHtml, patchStatus, removePatch, scriptName } from '../patch';
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FIXTURES = path.join(ROOT, 'test-fixtures');
@@ -150,9 +150,19 @@ export class VSCodeWindow {
     await this.page.bringToFront();
   }
 
-  /** True when VS Code's workbench.html is back to the original. */
+  /** True when VS Code's workbench.html is back to the original and our script files are gone. */
   isUnpatched(): boolean {
-    return patchStatus(this.workbenchHtml, '') === 'unpatched';
+    return patchStatus(this.workbenchHtml, '') === 'unpatched' && this.installedScripts().length === 0;
+  }
+
+  /** Our script files next to VS Code's workbench.html. */
+  installedScripts(): string[] {
+    return fs.readdirSync(path.dirname(this.workbenchHtml)).filter((f) => f.startsWith('tab-groups-patch'));
+  }
+
+  /** File name of this extension's current tab bar script once installed. */
+  expectedScript(): string {
+    return scriptName(fs.readFileSync(PATCH_SCRIPT, 'utf8'));
   }
 
   /**
@@ -496,11 +506,14 @@ export class VSCodeWindow {
     await this.settled(400); // the extension moves the group's tabs one by one
   }
 
-  /** Reloads the window, like Developer: Reload Window, and waits until the tab bar is connected again. */
-  async reload(): Promise<void> {
+  /**
+   * Reloads the window with a command that reloads it (Developer: Reload Window by default),
+   * and waits until the tab bar is connected again.
+   */
+  async reload(command = 'Developer: Reload Window'): Promise<void> {
     // Wait for the new page to load, not the old one that is still on screen when the command runs.
     const loaded = this.page.waitForEvent('load', { timeout: 90_000 });
-    await this.runCommand('Developer: Reload Window');
+    await this.runCommand(command);
     await loaded;
     await this.page.waitForSelector('.monaco-workbench', { timeout: 90_000 });
     // While the page is still being replaced, a check can throw; that just means "not yet".

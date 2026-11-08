@@ -94,6 +94,15 @@ export function registerPatchCommands(ctx: vscode.ExtensionContext, hooks: Patch
       hooks.onDisabled();
       await promptReload("TabPalette: tab bar patch removed and VS Code's files restored. Reload the window to apply.");
     }),
+    // For when the tab bar doesn't show the latest changes: write the script again, then reload.
+    vscode.commands.registerCommand('tabPalette.reloadPatch', async () => {
+      if (!isPatchEnabled(ctx)) {
+        return enableWithConfirm();
+      }
+      if (await install()) {
+        await vscode.commands.executeCommand('workbench.action.reloadWindow');
+      }
+    }),
   );
 
   void checkOnStartup();

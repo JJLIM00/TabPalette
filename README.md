@@ -92,6 +92,7 @@ VS Code's extension API cannot draw on the tab bar. To show chips and group line
 
 - **"Your Code installation appears to be corrupt."** VS Code shows this after any change to its files. It is expected; choose **Don't Show Again**.
 - **VS Code updates** replace the file. On the next start, TabPalette offers to add the script again.
+- **Tab bar not showing the latest version?** After an update, run **Tab Groups: Reload Tab Bar Script** from the Command Palette. It writes the script again and reloads the window.
 - **Permissions.** If VS Code is installed for all users (for example under *Program Files*), run VS Code as administrator once to enable or disable. Per-user installs don't need this.
 
 Without the script, groups still work from the context menus and the Command Palette, but nothing is drawn on the tab bar.
