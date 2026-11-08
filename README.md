@@ -1,5 +1,7 @@
 # TabPalette - Tab Groups
 
+[![CI](https://github.com/JJLIM00/TabPalette/actions/workflows/ci.yml/badge.svg)](https://github.com/JJLIM00/TabPalette/actions/workflows/ci.yml)
+
 **TabPalette** brings Chrome-style tab groups to VS Code. Name and color a group of tabs, collapse it to a single chip, and drag tabs in and out of it, right on the tab bar.
 
 ![Tab groups on the VS Code tab bar](images/tab-groups.png)
@@ -121,6 +123,24 @@ pnpm run vsix       # build a .vsix
 `pnpm run test:ui` uses every feature the way a person does: right-click menus, the group editor, clicking and dragging chips, dragging tabs, and the keyboard shortcuts. It then checks what is on screen. It patches only the test copy of VS Code in `.vscode-test`, restores it afterwards, and uses a temporary profile. Don't use the mouse or keyboard while it runs. When a test fails, a screenshot of the window is saved to `out/ui-failures/`.
 
 Press **F5** to start an Extension Development Host with the `test-fixtures` folder open. That window runs your installed VS Code, so **Enable** there patches your real installation. Run **Disable** to undo it.
+
+### Continuous integration
+
+Every push to `master` and every pull request runs [CI](.github/workflows/ci.yml) on GitHub: type-check, lint, bundle, the unit and integration tests, and packaging, on Windows, Linux and macOS. The UI tests are not run there; run them locally before a release.
+
+### Releasing a new version
+
+1. Update `version` in `package.json` and add a `## <version>` section with the release notes to `CHANGELOG.md`.
+2. Commit and push, then tag the commit and push the tag:
+
+   ```bash
+   git tag v0.1.1
+   git push origin v0.1.1
+   ```
+
+The [Release workflow](.github/workflows/release.yml) then runs the CI checks, publishes the extension to the VS Code Marketplace, and creates a GitHub Release with the `.vsix` attached. It stops if the tag doesn't match the version in `package.json`, or if `CHANGELOG.md` has no notes for it.
+
+Publishing needs a repository secret named `VSCE_PAT`, set up once: an Azure DevOps Personal Access Token with the **Marketplace → Manage** scope, organization **All accessible organizations**. Add it under **Settings → Secrets and variables → Actions → New repository secret** on GitHub.
 
 ## License
 
