@@ -272,6 +272,38 @@ suite('TabPalette in a real VS Code window', () => {
     });
   });
 
+  suite('pinned tabs (never in a group, like Chrome)', () => {
+    const isPinned = (name: string) => vscode.window.tabGroups.activeTabGroup.tabs.some((t) => t.isPinned && nameOf(tabUri(t)?.toString() ?? '') === name);
+
+    teardown(async () => {
+      for (const name of ['a.txt', 'b.txt', 'c.txt', 'd.txt']) {
+        if (isPinned(name)) {
+          await open(name);
+          await run('workbench.action.unpinEditor');
+        }
+      }
+    });
+
+    test('pinning a grouped tab takes it out of its group', async () => {
+      const main = makeGroup('Main', 'color1', ['a.txt', 'b.txt']);
+      await open('b.txt');
+      await run('workbench.action.pinEditor');
+      await waitFor('b.txt left Main', () => groupNameOf('b.txt') === undefined);
+      assert.deepStrictEqual(members(main), ['a.txt']);
+    });
+
+    test('a pinned tab added to a group is unpinned first', async () => {
+      const main = makeGroup('Main', 'color1', ['c.txt']);
+      await open('a.txt');
+      await run('workbench.action.pinEditor');
+      await waitFor('a.txt is pinned', () => isPinned('a.txt'));
+      answerPrompts({ pick: ['Main'] });
+      await run('tabPalette.addToGroup', fileUri('a.txt'));
+      assert.ok(!isPinned('a.txt'), 'a.txt is no longer pinned');
+      assert.deepStrictEqual(members(main), ['c.txt', 'a.txt']);
+    });
+  });
+
   suite('removing and closing tabs', () => {
     test('a tab removed from the middle of a group moves just past it, so the group stays in one piece', async () => {
       const main = makeGroup('Main', 'color1', ['a.txt', 'b.txt', 'c.txt']);

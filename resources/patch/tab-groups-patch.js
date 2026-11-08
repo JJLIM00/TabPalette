@@ -158,6 +158,49 @@
     return name ? name.textContent : tab.getAttribute('aria-label') || '';
   }
 
+  // ---------------------------------------------------------------- tab rows
+  //
+  // One tab row of VS Code (an editor group) is usually one `.tabs-container`. With
+  // `workbench.editor.pinnedTabsOnSeparateRow`, its pinned tabs get a tab bar of their own
+  // above the others: then one row is two `.tabs-container`s in the same `.title`.
+
+  function tabsIn(container) {
+    return Array.prototype.filter.call(container.children, function (n) {
+      return n.classList && n.classList.contains('tab');
+    });
+  }
+
+  /** Every tab of the tab row that `container` belongs to, in order (pinned tabs first). */
+  function rowTabs(container) {
+    var title = container.closest('.title');
+    var containers = title ? title.querySelectorAll('.tabs-container') : [container];
+    return Array.prototype.reduce.call(
+      containers,
+      function (all, c) {
+        return all.concat(tabsIn(c));
+      },
+      [],
+    );
+  }
+
+  /** The tab rows on screen: the `.tabs-container`s of each editor group, and all their tabs. */
+  function domRows() {
+    var rows = [];
+    var seen = [];
+    document.querySelectorAll('.tabs-container').forEach(function (container) {
+      var title = container.closest('.title') || container;
+      var at = seen.indexOf(title);
+      if (at < 0) {
+        seen.push(title);
+        rows.push({ containers: [container], tabs: tabsIn(container) });
+      } else {
+        rows[at].containers.push(container);
+        rows[at].tabs = rows[at].tabs.concat(tabsIn(container));
+      }
+    });
+    return rows;
+  }
+
   // ---------------------------------------------------------------- rendering
 
   function render() {
@@ -167,13 +210,11 @@
     });
     var fg = chipForegrounds();
     var usedRows = {};
-    var containers = document.querySelectorAll('.tabs-container');
-    for (var c = 0; c < containers.length; c++) {
-      var tabs = Array.prototype.filter.call(containers[c].children, function (n) {
-        return n.classList.contains('tab');
-      });
+    var rows = domRows();
+    for (var c = 0; c < rows.length; c++) {
+      var tabs = rows[c].tabs;
       var labels = tabs.map(labelOf);
-      // Match this DOM tab row to a tab row of the extension by its exact label sequence.
+      // Match this tab row on screen to a tab row of the extension by its exact label sequence.
       var info = null;
       if (state) {
         for (var r = 0; r < state.rows.length; r++) {
@@ -188,16 +229,17 @@
           if (same) {
             usedRows[r] = true;
             info = row;
-            if (containers[c].dataset.tgRow !== String(r)) {
-              containers[c].dataset.tgRow = String(r);
-            }
             break;
           }
         }
       }
-      if (!info && containers[c].dataset.tgRow !== undefined) {
-        delete containers[c].dataset.tgRow;
-      }
+      rows[c].containers.forEach(function (container) {
+        if (info && container.dataset.tgRow !== String(r)) {
+          container.dataset.tgRow = String(r);
+        } else if (!info && container.dataset.tgRow !== undefined) {
+          delete container.dataset.tgRow;
+        }
+      });
       for (var i = 0; i < tabs.length; i++) {
         var gid = info ? info[i].group : null;
         decorate(tabs[i], gid ? groups[gid] : null, info, i, fg);
@@ -361,9 +403,10 @@
     if (!container || container.dataset.tgRow === undefined) {
       return null;
     }
-    var tabs = Array.prototype.filter.call(container.children, function (n) {
-      return n.classList.contains('tab');
-    });
+    // Gaps in this tab bar only (a group can't move among pinned tabs on a tab bar of their own);
+    // `offset` turns a position in this bar into a position in the whole tab row.
+    var tabs = tabsIn(container);
+    var offset = rowTabs(container).indexOf(tabs[0]);
     var gids = tabs.map(function (t) {
       return t.dataset.tgGid || '';
     });
@@ -394,7 +437,7 @@
       var gapX = i < tabs.length ? leftEdge(tabs[i]) : end;
       var d = Math.abs(gapX - x);
       if (!best || d < best.d) {
-        best = { row: +container.dataset.tgRow, index: i, x: gapX, d: d, rect: container.getBoundingClientRect() };
+        best = { row: +container.dataset.tgRow, index: offset + i, x: gapX, d: d, rect: container.getBoundingClientRect() };
       }
     }
     return best;
@@ -465,8 +508,8 @@
     if (!container || !tab.classList.contains('selected')) {
       return [tab];
     }
-    return Array.prototype.filter.call(container.children, function (t) {
-      return t.classList && t.classList.contains('tab') && t.classList.contains('selected');
+    return rowTabs(container).filter(function (t) {
+      return t.classList.contains('selected');
     });
   }
 
@@ -477,9 +520,7 @@
     if (!tab || !container || container.dataset.tgRow === undefined || !ws || ws.readyState !== 1) {
       return;
     }
-    var all = Array.prototype.filter.call(container.children, function (t) {
-      return t.classList && t.classList.contains('tab');
-    });
+    var all = rowTabs(container);
     var indexes = selectedWith(tab).map(function (t) {
       return all.indexOf(t);
     });
@@ -507,11 +548,13 @@
     var own = tabDrag.tab.dataset.tgGid;
     var bar = e.target && e.target.closest ? e.target.closest('.tabs-and-actions-container') : null;
     var container = bar ? bar.querySelector('.tabs-container') : null;
-    if (!own || !container || container !== tabDrag.tab.parentElement || container.dataset.tgRow === undefined) {
+    var source = tabDrag.tab.parentElement;
+    // Over the tab bar of the dragged tab's own row (or that row's bar of pinned tabs).
+    if (!own || !container || !source || container.closest('.title') !== source.closest('.title') || container.dataset.tgRow === undefined) {
       return null;
     }
-    var mates = Array.prototype.filter.call(container.children, function (t) {
-      return tabDrag.tabs.indexOf(t) < 0 && t.dataset && t.dataset.tgGid === own;
+    var mates = rowTabs(container).filter(function (t) {
+      return tabDrag.tabs.indexOf(t) < 0 && t.dataset.tgGid === own;
     });
     if (mates.length === 0) {
       return null; // the drag holds the whole group: it takes its group with it
@@ -524,7 +567,7 @@
     if (tab && tab.dataset.tgGid && !overChip) {
       return null; // over a group tab: its own group (reorder) or another one (join)
     }
-    return { gid: own, row: +container.dataset.tgRow };
+    return { gid: own, row: +container.dataset.tgRow, container: container };
   }
 
   function joinTargetAt(e) {
@@ -603,10 +646,12 @@
     if (!tabDrag) {
       return;
     }
-    var container = tabDrag.leaveContainer || tabDrag.tab.parentElement;
-    if (container) {
-      toggle(container, 'tg-leave', !!leave);
-      tabDrag.leaveContainer = leave ? container : null;
+    var was = tabDrag.leave && tabDrag.leave.container;
+    if (was && (!leave || leave.container !== was)) {
+      toggle(was, 'tg-leave', false);
+    }
+    if (leave) {
+      toggle(leave.container, 'tg-leave', true);
     }
     tabDrag.leave = leave;
   }

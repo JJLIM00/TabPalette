@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- Fixed: groups were no longer drawn when pinned tabs are shown on a separate row (`workbench.editor.pinnedTabsOnSeparateRow`).
+- Pinned tabs are never in a group, like in Chrome: pinning a grouped tab takes it out of its group, and adding a pinned tab to a group unpins it.
+
 ## 0.1.1
 
 - The screenshots on the extension page load reliably (they are now served from raw.githubusercontent.com).

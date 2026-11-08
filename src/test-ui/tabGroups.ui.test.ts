@@ -588,6 +588,57 @@ suite('TabPalette — used like a person would', function () {
     });
   });
 
+  // ------------------------------------------------------------------ pinned tabs
+
+  suite('pinned tabs', () => {
+    /** Right-click a tab → Pin / Unpin (VS Code's own commands). */
+    const pin = (file: string) => vscode.tabMenu(file, 'Pin');
+    const unpin = (file: string) => vscode.tabMenu(file, 'Unpin');
+    const isPinned = async (file: string) => (await vscode.tab(file)).pinned;
+
+    test('with pinned tabs on a row of their own, groups are still drawn', async () => {
+      await vscode.setUserSetting('workbench.editor.pinnedTabsOnSeparateRow', true);
+      try {
+        await makeGroup('Main', ['c.txt', 'd.txt'], 'Blue');
+        await pin('a.txt');
+        await vscode.waitUntil('a.txt is pinned', () => isPinned('a.txt'));
+        assert.deepStrictEqual(await vscode.chips(), [{ name: 'Main', color: COLORS.Blue, collapsed: false, isDot: false }]);
+        assert.strictEqual(await groupOf('c.txt'), 'Main');
+        assert.strictEqual(await groupOf('d.txt'), 'Main');
+        assert.strictEqual((await vscode.tab('c.txt')).lineColor, COLORS.Blue, 'the group line is drawn too');
+        assert.strictEqual((await vscode.tab('d.txt')).outlined, true, 'and the outline around the active tab');
+
+        // Dragging the chip: the drop position counts the tabs of both tab bars.
+        await vscode.dragChip('Main', { before: 'b.txt' });
+        assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'c.txt', 'd.txt', 'b.txt']);
+        assert.strictEqual(await isPinned('a.txt'), true);
+      } finally {
+        await unpin('a.txt');
+        await vscode.setUserSetting('workbench.editor.pinnedTabsOnSeparateRow', undefined);
+      }
+    });
+
+    test("pinning a grouped tab takes it out of its group (pinned tabs can't be in a group, like Chrome)", async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt']);
+      await pin('b.txt');
+      try {
+        await vscode.waitUntil('b.txt left Main', async () => (await groupOf('b.txt')) === null);
+        assert.strictEqual(await groupOf('a.txt'), 'Main');
+      } finally {
+        await unpin('b.txt');
+      }
+    });
+
+    test('adding a pinned tab to a group unpins it', async () => {
+      await makeGroup('Main', ['c.txt']);
+      await pin('a.txt');
+      await vscode.waitUntil('a.txt is pinned', () => isPinned('a.txt'));
+      await addToGroup('a.txt', 'Main');
+      assert.strictEqual(await isPinned('a.txt'), false);
+      assert.strictEqual(await groupOf('a.txt'), 'Main');
+    });
+  });
+
   // ------------------------------------------------------------------ saved per workspace
 
   suite('saved per workspace', () => {

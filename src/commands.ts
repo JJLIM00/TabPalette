@@ -62,6 +62,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
 
   /** Chrome: a new group gets the next color and opens its editor bubble right away. */
   async function createGroup(uris: string[]): Promise<TabGroup> {
+    await layout.unpin(uris);
     const group = store.create('', store.nextColor(), uris);
     await layout.placeInGroup(uris);
     const bridge = deps.bridge();
@@ -77,6 +78,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
   }
 
   async function addTo(groupId: string, uris: string[]): Promise<void> {
+    await layout.unpin(uris);
     store.addUris(groupId, uris);
     store.setCollapsed(groupId, false);
     await layout.placeInGroup(uris);

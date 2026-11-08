@@ -73,6 +73,30 @@ export class Layout {
   }
 
   /**
+   * Chrome: pinned tabs are never in a group, so a pinned tab added to a group is unpinned
+   * first. Call before adding `uris` to a group (a pinned group tab would leave it again).
+   */
+  async unpin(uris: string[]): Promise<void> {
+    const wanted = new Set(uris);
+    const pinned = vscode.window.tabGroups.all.flatMap((row) =>
+      row.tabs.filter((t) => t.isPinned && wanted.has(tabUri(t)?.toString() ?? '')).map((tab) => ({ row, tab })),
+    );
+    if (pinned.length === 0) {
+      return;
+    }
+    const before = activeLocation();
+    await this.tracker.suspend(async () => {
+      for (const { row, tab } of pinned) {
+        await vscode.commands.executeCommand('vscode.open', tabUri(tab), { viewColumn: row.viewColumn, preview: false });
+        await vscode.commands.executeCommand('workbench.action.unpinEditor');
+      }
+      if (before) {
+        await vscode.commands.executeCommand('vscode.open', before.uri, { viewColumn: before.viewColumn, preview: false });
+      }
+    });
+  }
+
+  /**
    * Chrome keeps a group's tabs together: move each of `uris` (tabs just added to their
    * group) next to the group's other tabs. Added to an existing group, a tab goes after
    * the group's last tab. When every tab of the group is new (a new group made from

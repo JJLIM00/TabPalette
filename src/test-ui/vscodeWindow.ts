@@ -34,6 +34,7 @@ export interface TabView {
   hidden: boolean;
   /** Shows Chrome's rounded outline (active tab of a group). */
   outlined: boolean;
+  pinned: boolean;
 }
 
 /** What one group chip looks like to the user. */
@@ -155,6 +156,22 @@ export class VSCodeWindow {
   }
 
   /**
+   * Changes a user setting by editing the test profile's settings.json, like a user editing
+   * the file (VS Code picks up the change by itself). `undefined` removes the setting.
+   */
+  async setUserSetting(key: string, value: unknown): Promise<void> {
+    const file = path.join(this.profileDir, 'user', 'User', 'settings.json');
+    const settings = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+    if (value === undefined) {
+      delete settings[key];
+    } else {
+      settings[key] = value;
+    }
+    fs.writeFileSync(file, JSON.stringify(settings, null, 2));
+    await this.idle(1000); // VS Code notices the file change
+  }
+
+  /**
    * Sets `workbench.colorCustomizations` by editing the test profile's settings.json, like a
    * user editing the file, and waits until VS Code has applied it (the theme colors changed).
    * `undefined` removes the setting again.
@@ -196,8 +213,9 @@ export class VSCodeWindow {
     return this.page.evaluate(() => {
       const state = window.__tabGroupsPatch?.state;
       const groupName = (id: string | undefined) => (id ? (state?.groups.find((g) => g.id === id)?.name ?? '?') : null);
-      const row = document.querySelector('.editor-group-container.active .tabs-container') ?? document.querySelector('.tabs-container');
-      return [...(row?.querySelectorAll(':scope > .tab') ?? [])].map((node) => {
+      // All tab bars of the active editor group (pinned tabs can have a tab bar of their own).
+      const group = document.querySelector('.editor-group-container.active') ?? document;
+      return [...group.querySelectorAll('.tabs-container > .tab')].map((node) => {
         const tab = node as HTMLElement;
         const line = tab.querySelector(':scope > .tg-line');
         const outline = tab.querySelector(':scope > .tg-u');
@@ -209,6 +227,7 @@ export class VSCodeWindow {
           active: tab.classList.contains('active'),
           hidden: style.display === 'none' || tab.getBoundingClientRect().width === 0,
           outlined: !!outline && getComputedStyle(outline).display !== 'none',
+          pinned: tab.classList.contains('sticky'),
         };
       });
     });
@@ -595,7 +614,7 @@ export class VSCodeWindow {
     }
   }
 
-  /** Waits a fixed time: only for mouse moves during a drag, which need real time between them. */
+  /** Waits a fixed time: for mouse moves during a drag, and for VS Code to notice a settings file change. */
   idle(ms: number): Promise<void> {
     return this.page.waitForTimeout(ms);
   }

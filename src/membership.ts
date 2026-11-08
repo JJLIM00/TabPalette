@@ -111,6 +111,16 @@ export class MembershipTracker implements vscode.Disposable {
       this.store.pruneEmpty();
     }
 
+    // Chrome: pinned tabs are never in a group, so pinning a grouped tab takes it out.
+    const pinned = [...e.opened, ...e.changed]
+      .filter((t) => t.isPinned)
+      .map((t) => tabUri(t)?.toString())
+      .filter((u): u is string => !!u && !!this.store.groupOf(u));
+    if (pinned.length > 0) {
+      this.store.removeUris(pinned);
+      this.store.pruneEmpty();
+    }
+
     if (this.suspended === 0) {
       for (const group of vscode.window.tabGroups.all) {
         const before = this.snapshots.get(group);
