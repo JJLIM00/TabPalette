@@ -16,3 +16,4 @@ tsconfig.json
 .vscode-test.mjs
 **/*.map
 **/*.ts
+CONTRIBUTING.md

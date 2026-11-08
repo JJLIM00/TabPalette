@@ -10,14 +10,9 @@
 
 - **Group chips and lines.** Each group shows a colored chip with its name in front of its tabs, and a line in the group's color runs under them. The active tab in a group gets Chrome's rounded outline.
 - **Nine colors, your palette.** Chrome's grey, blue, red, yellow, green, pink, purple, cyan and orange by default, tuned for light and dark themes. Each of the nine can be changed in your settings (see [Custom colors](#custom-colors)).
-- **Collapse with a click.** Click a chip to hide the group's tabs and click it again to bring them back.
+- **Collapse with a click.** Click a chip to hide the group's tabs, and click it again to bring them back.
 - **Edit in place.** Right-click a chip to rename the group, pick a color, open a new tab in it, move it to a new window, or close, ungroup or delete it.
-- **Drag and drop.**
-  - Drop a tab onto any tab of a group to add it to the group, even a group with a single tab. While you hover, the drop line takes the group's color.
-  - Drop it on the group's chip instead to place it just before the group, outside it.
-  - Drop a grouped tab outside its group (on an ungrouped tab, a chip, or the empty end of the tab bar) to remove it, even right next to the group, e.g. the group's last tab dragged a little to the right. While you hover, the drop line turns red to warn that releasing will ungroup the tab. A group's only tab carries its group along instead.
-  - Several selected tabs (Ctrl/Shift+click) are dragged together: they all join, or all leave, the group.
-  - Drag a chip to move the whole group.
+- **Drag and drop.** Drag tabs into a group, out of it, or between groups, and drag a chip to move the whole group. The drop line shows what will happen: the group's color when the tab will join, red when it will leave.
 - **Groups stay together.** A tab added to a group moves next to it. A tab removed from the middle of a group moves just past the group, so the group never splits.
 - **Saved per workspace.** Groups come back when you reopen the folder, including closed groups.
 
@@ -25,9 +20,10 @@
 
 ## Getting started
 
-1. Install TabPalette. On first start it asks to **Enable** Chrome-style tab groups (see [How it draws on the tab bar](#how-it-draws-on-the-tab-bar)). Confirm, then reload the window.
-2. Right-click a tab and choose **Add Tab to New Group**. Type a name, pick a color, and press Enter.
-3. Right-click more tabs and choose **Add Tab to Group…**, or drag them onto the group's tabs.
+1. Install **TabPalette - Tab Groups** from the Extensions view, or run `ext install JJLIM00.tabpalette` in Quick Open (`Ctrl+P`).
+2. On first start, TabPalette asks to **Enable** Chrome-style tab groups. Confirm, then reload the window. (Why it asks: see [How it draws on the tab bar](#how-it-draws-on-the-tab-bar).)
+3. Right-click a tab and choose **Add Tab to New Group**. Type a name, pick a color, and press Enter.
+4. Right-click more tabs and choose **Add Tab to Group…**, or drag them onto the group's tabs.
 
 ![Add a tab to a group from the tab's context menu](images/add-to-group.png)
 
@@ -36,17 +32,18 @@
 | To… | Do this |
 |---|---|
 | Create a group | Right-click a tab → **Add Tab to New Group**. The group gets the next free color, and its editor opens so you can name it. |
-| Add a tab to a group | Right-click the tab → **Add Tab to Group…**, or drag it onto any tab of the group (the drop line turns the group's color). Dropping it on the chip places it before the group instead. |
-| Group several tabs at once | Ctrl/Shift+click the tabs, then right-click → **Add Selected Tabs to Group…** (or **…to New Group**), or drag them onto a group. |
+| Add a tab to a group | Right-click the tab → **Add Tab to Group…**, or drag it onto any tab of the group, even a group with a single tab. |
+| Group several tabs at once | Ctrl/Shift+click the tabs, then right-click → **Add Selected Tabs to Group…** (or **…to New Group**), or drag them onto a group together. |
 | Add a file from the Explorer | Right-click the file in the Explorer → **Add Tab to Group…** |
-| Remove a tab from its group | Right-click → **Tab Group → Remove Tab from Group**, or drag it out of the group: drop it on an ungrouped tab, a chip, or the empty end of the tab bar. |
+| Remove a tab from its group | Right-click → **Tab Group → Remove Tab from Group**, or drag it out of the group: onto an ungrouped tab, a chip, or the empty end of the tab bar. |
+| Put a tab next to a group without joining it | Drop it on the group's chip: it lands just before the group. |
 | Collapse or expand | Click the chip. Opening a hidden tab (Quick Open, Explorer…) expands its group. |
 | Rename or recolor | Right-click the chip. The name updates as you type. Enter or Esc closes the editor. |
 | Move a group | Drag its chip to a new place on the tab bar. |
 | Close a group | Chip editor → **Close group**. The tabs close and the group is kept; reopen it from **Tab Groups: Show Tab Groups** (`Ctrl+Alt+T`). |
 | Ungroup or delete | **Ungroup** keeps the tabs open. **Delete group** closes them too. |
 
-Closing a tab removes it from its group, and a group disappears when its last tab is closed.
+Closing a tab removes it from its group, and a group disappears when its last tab is closed. A group's only tab keeps its group wherever you drag it.
 
 ![Collapsed groups](images/collapsed.png)
 
@@ -60,9 +57,9 @@ Closing a tab removes it from its group, and a group disappears when its last ta
 
 Every action is also in the Command Palette under **Tab Groups:**.
 
-### Custom colors
+## Custom colors
 
-The nine group colors are numbered slots, **Color 1** to **Color 9**. By default they are Chrome's colors, but each slot can be set to any color you like, so you can make your own palette. Together with the red "ungroup" drop line, they are theme colors that you change in your settings:
+The nine group colors are numbered slots, **Color 1** to **Color 9**. By default they are Chrome's colors, but you can set each slot to any color you like and make your own palette. Together with the red "ungroup" drop line, they are theme colors that you change in your settings:
 
 ```jsonc
 "workbench.colorCustomizations": {
@@ -91,56 +88,29 @@ You can also set colors for one theme only, e.g. `"[Default Dark Modern]": { "ta
 
 ## How it draws on the tab bar
 
-VS Code's extension API cannot draw on the tab bar. To show chips and group lines, the extension adds one small script to VS Code's own UI file, `workbench.html`. It asks before doing so, and you can undo it at any time.
+VS Code's extension API cannot draw on the tab bar. To show chips and group lines, TabPalette adds one small script to VS Code's own UI file, `workbench.html`. It asks before doing so, and you can undo it at any time.
 
 - **"Your Code installation appears to be corrupt."** VS Code shows this after any change to its files. It is expected; choose **Don't Show Again**.
-- **VS Code updates** replace the file. On the next start the extension offers to re-apply the script.
-- **To undo it,** run **Tab Groups: Disable Chrome-style Tab Groups**. It restores VS Code's original file exactly. Do this before uninstalling the extension.
+- **VS Code updates** replace the file. On the next start, TabPalette offers to add the script again.
 - **Permissions.** If VS Code is installed for all users (for example under *Program Files*), run VS Code as administrator once to enable or disable. Per-user installs don't need this.
 
 Without the script, groups still work from the context menus and the Command Palette, but nothing is drawn on the tab bar.
 
-**Privacy and security.** The extension never changes your settings and sends nothing over the network. The script talks to the extension through a WebSocket on `127.0.0.1` only. That socket accepts only VS Code's own window origin, and only with a random token that is created for each session.
+**Privacy and security.** TabPalette never changes your settings and sends nothing over the network. The script talks to the extension through a WebSocket on `127.0.0.1` only. That socket accepts only VS Code's own window origin, and only with a random token that is created for each session.
+
+## Uninstalling
+
+Before you uninstall, run **Tab Groups: Disable Chrome-style Tab Groups** from the Command Palette. It removes the script and restores VS Code's original file exactly. Then reload the window and uninstall the extension.
 
 ## Known limitations
 
-- Chips are drawn in the main window. Groups moved to a new window keep their membership, but are not drawn there.
+- Chips are drawn in the main window only. Groups moved to a new window keep their tabs, but are not drawn there.
 - Only file tabs can be grouped. Settings, the Welcome page and other special editors can't join a group.
-- The patch targets VS Code desktop. It does not work in VS Code for the Web or in Codespaces in the browser.
+- Works in VS Code desktop only, not in VS Code for the Web or in Codespaces in the browser.
 
-## Development
+## Feedback
 
-Requires [pnpm](https://pnpm.io).
-
-```bash
-pnpm install
-pnpm run compile    # type-check and bundle to dist/
-pnpm test           # unit and integration tests in a VS Code test host
-pnpm run test:ui    # UI tests: drives a real VS Code window with the mouse and keyboard (about 3 minutes)
-pnpm run vsix       # build a .vsix
-```
-
-`pnpm run test:ui` uses every feature the way a person does: right-click menus, the group editor, clicking and dragging chips, dragging tabs, and the keyboard shortcuts. It then checks what is on screen. It patches only the test copy of VS Code in `.vscode-test`, restores it afterwards, and uses a temporary profile. Don't use the mouse or keyboard while it runs. When a test fails, a screenshot of the window is saved to `out/ui-failures/`.
-
-Press **F5** to start an Extension Development Host with the `test-fixtures` folder open. That window runs your installed VS Code, so **Enable** there patches your real installation. Run **Disable** to undo it.
-
-### Continuous integration
-
-Every push to `master` and every pull request runs [CI](.github/workflows/ci.yml) on GitHub: type-check, lint, bundle, the unit and integration tests, and packaging, on Windows, Linux and macOS. The UI tests are not run there; run them locally before a release.
-
-### Releasing a new version
-
-1. Update `version` in `package.json` and add a `## <version>` section with the release notes to `CHANGELOG.md`.
-2. Commit and push, then tag the commit and push the tag:
-
-   ```bash
-   git tag v0.1.1
-   git push origin v0.1.1
-   ```
-
-The [Release workflow](.github/workflows/release.yml) then runs the CI checks, publishes the extension to the VS Code Marketplace, and creates a GitHub Release with the `.vsix` attached. It stops if the tag doesn't match the version in `package.json`, or if `CHANGELOG.md` has no notes for it.
-
-Publishing needs a repository secret named `VSCE_PAT`, set up once: an Azure DevOps Personal Access Token with the **Marketplace → Manage** scope, organization **All accessible organizations**. Add it under **Settings → Secrets and variables → Actions → New repository secret** on GitHub.
+Found a bug or have an idea? [Open an issue](https://github.com/JJLIM00/TabPalette/issues). Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
