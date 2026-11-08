@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- The screenshots on the extension page load reliably (they are now served from raw.githubusercontent.com).
+
 ## 0.1.0
 
 First public release.
