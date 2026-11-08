@@ -3,8 +3,16 @@
   "displayName": "TabPalette - Tab Groups",
   "description": "Chrome-style tab groups on the VS Code tab bar: named, colored groups you can collapse, drag tabs into, and reorder.",
   "version": "0.1.0",
-  "publisher": "local",
+  "publisher": "JJLIM00",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JJLIM00/TabPalette.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JJLIM00/TabPalette/issues"
+  },
+  "homepage": "https://github.com/JJLIM00/TabPalette#readme",
   "icon": "images/icon.png",
   "galleryBanner": {
     "color": "#202124",
