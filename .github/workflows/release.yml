@@ -1,5 +1,7 @@
 # Publishes a new version when a version tag is pushed, e.g. `v0.1.1`:
-#   1. runs the same checks as CI (Windows, Linux, macOS),
+#   1. waits for the CI run of the tagged commit (started when it was pushed to master)
+#      instead of running the same checks a second time; runs them itself only when
+#      that commit has no CI run,
 #   2. checks that the tag matches "version" in package.json,
 #   3. builds the .vsix and publishes it to the VS Code Marketplace,
 #   4. creates a GitHub Release with the notes from CHANGELOG.md and the .vsix attached.
@@ -15,11 +17,49 @@ permissions:
   contents: read
 
 jobs:
+  # The tagged commit is normally pushed to master first, so CI is already checking it.
+  # Wait for that run's result rather than repeating the same checks.
+  ci-result:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # to find and follow the CI run
+    outputs:
+      found: ${{ steps.find.outputs.found }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Find the CI run of this commit
+        id: find
+        run: |
+          # When the commit and the tag are pushed together, the CI run can take a moment to appear.
+          for attempt in $(seq 1 12); do
+            id=$(gh run list --workflow ci.yml --event push --commit "${GITHUB_SHA}" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            if [ -n "${id}" ]; then
+              echo "CI run: ${GITHUB_SERVER_URL}/${GH_REPO}/actions/runs/${id}"
+              echo "id=${id}" >> "$GITHUB_OUTPUT"
+              echo "found=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "No CI run for this commit (it was not pushed to master), so the release runs the checks itself."
+          echo "found=false" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the CI run to pass
+        if: steps.find.outputs.found == 'true'
+        run: gh run watch "${{ steps.find.outputs.id }}" --exit-status --interval 15 > /dev/null
+
+  # Only for a tag on a commit that CI never checked.
   checks:
+    needs: ci-result
+    if: needs.ci-result.outputs.found == 'false'
     uses: ./.github/workflows/ci.yml
 
   publish:
-    needs: checks
+    needs: [ci-result, checks]
+    # Publish when the CI run passed (checks skipped), or when the release's own checks passed.
+    if: ${{ !cancelled() && needs.ci-result.result == 'success' && (needs.checks.result == 'success' || needs.checks.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # to create the GitHub Release

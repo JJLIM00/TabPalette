@@ -32,6 +32,6 @@ Every push to `master` and every pull request runs [CI](.github/workflows/ci.yml
    git push origin v0.1.1
    ```
 
-The [Release workflow](.github/workflows/release.yml) then runs the CI checks, publishes the extension to the VS Code Marketplace, and creates a GitHub Release with the `.vsix` attached. It stops if the tag doesn't match the version in `package.json`, or if `CHANGELOG.md` has no notes for it.
+The [Release workflow](.github/workflows/release.yml) then waits for the CI run that pushing the commit started, instead of running the same checks again (it runs them itself only if the tagged commit was never pushed to `master`). If they pass, it publishes the extension to the VS Code Marketplace, and creates a GitHub Release with the `.vsix` attached. It stops if the tag doesn't match the version in `package.json`, or if `CHANGELOG.md` has no notes for it.
 
 Publishing uses the Marketplace's **Trusted Publishing**, so no token is stored on GitHub. It is set up once on the [publisher's page](https://marketplace.visualstudio.com/manage) → **Trusted Publishing**, with a policy for repository owner `JJLIM00`, repository `TabPalette`, workflow `release.yml`, and no environment.
