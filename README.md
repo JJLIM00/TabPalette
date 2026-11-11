@@ -15,6 +15,7 @@
 - **Drag and drop.** Drag tabs into a group, out of it, or between groups, and drag a chip to move the whole group. The drop line shows what will happen: the group's color when the tab will join, red when it will leave.
 - **Groups stay together.** A tab added to a group moves next to it. A tab removed from the middle of a group moves just past the group, so the group never splits.
 - **Saved per workspace.** Groups come back when you reopen the folder, including closed groups.
+- **Tab Groups side bar.** All open tabs listed top to bottom, like Chrome's vertical tabs, each group under a header in its color. See [The side bar](#the-side-bar).
 
 ![Group editor](images/group-editor.png)
 
@@ -46,6 +47,25 @@
 Closing a tab removes it from its group, and a group disappears when its last tab is closed. A group's only tab keeps its group wherever you drag it.
 
 ![Collapsed groups](images/collapsed.png)
+
+### The side bar
+
+Click the **Tab Groups** icon in the Activity Bar to see every open tab as a list, like Chrome's vertical tabs. Each group shows as a header in its color, with its tabs under it. The side bar works with or without the tab bar patch.
+
+![The Tab Groups side bar](images/sidebar.png)
+
+| To… | Do this |
+|---|---|
+| Open or close a tab | Click it. Click its **×**, or middle-click it, to close it. |
+| Collapse or expand a group | Click its header. A collapsed header shows how many tabs it holds. |
+| Select several tabs | Ctrl+click (Cmd+click on macOS) to add or remove a tab, Shift+click to select a range. Drag one of them to move them all, right-click for **Add Selected Tabs to Group…** and the like, or press Delete to close them. A plain click clears the selection. While the tab bar patch is on, the side bar and the tab bar share one selection. |
+| Add a tab to a group | Drag it onto one of the group's tabs (it lands there) or onto the group's header (it becomes the first tab). |
+| Take a tab out of its group | Drag it next to a tab outside the group, or onto the empty space below the list. |
+| Move a group | Drag its header. |
+| Rename, recolor, close, ungroup or delete | Right-click the group's header, or hover it and click **⋮** (or press F2 on it), like in Chrome: type a name, pick a color, or choose an action. |
+| Reopen a closed group | Click it under **Closed groups**. |
+
+While you drag, the drop line shows what will happen: the group's color when the tab will join it, red when it will leave its group. With several editor groups (split editors), each one gets its own list, and tabs move within their own list. You can drag the view to the secondary side bar too.
 
 ### Keyboard shortcuts
 
@@ -107,6 +127,7 @@ Before you uninstall, run **Tab Groups: Disable Chrome-style Tab Groups** from t
 
 - Chips are drawn in the main window only. Groups moved to a new window keep their tabs, but are not drawn there.
 - Only file tabs can be grouped. Settings, the Welcome page and other special editors can't join a group.
+- The side bar shows a plain file icon for every tab, not your file icon theme's icons (VS Code doesn't share them with extensions).
 - Works in VS Code desktop only, not in VS Code for the Web or in Codespaces in the browser.
 
 ## Feedback

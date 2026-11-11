@@ -12,7 +12,7 @@ import { downloadAndUnzipVSCode } from '@vscode/test-electron';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ElectronApplication, Page, _electron } from 'playwright-core';
+import { ElectronApplication, Frame, Page, _electron } from 'playwright-core';
 import { applyPatch, findWorkbenchHtml, patchStatus, removePatch, scriptName } from '../patch';
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -30,6 +30,8 @@ export interface TabView {
   /** Color of the group line under the tab (CSS rgb), or null. */
   lineColor: string | null;
   active: boolean;
+  /** Selected (Ctrl/Shift+click); the active tab is selected too. */
+  selected: boolean;
   /** Hidden because its group is collapsed. */
   hidden: boolean;
   /** Shows Chrome's rounded outline (active tab of a group). */
@@ -235,6 +237,7 @@ export class VSCodeWindow {
           group: groupName(tab.dataset.tgGid),
           lineColor: line && getComputedStyle(line).display !== 'none' ? getComputedStyle(line).borderBottomColor : tab.dataset.tgGid ? 'hidden' : null,
           active: tab.classList.contains('active'),
+          selected: tab.classList.contains('selected'),
           hidden: style.display === 'none' || tab.getBoundingClientRect().width === 0,
           outlined: !!outline && getComputedStyle(outline).display !== 'none',
           pinned: tab.classList.contains('sticky'),
@@ -632,6 +635,91 @@ export class VSCodeWindow {
     return this.page.waitForTimeout(ms);
   }
 
+  // ------------------------------------------------------------------ the Tab Groups side bar
+
+  /** Opens the Tab Groups view from the Activity Bar and returns its page (a frame inside the window). */
+  async openSidebar(): Promise<Frame> {
+    await this.page.locator('.activitybar .action-item a[aria-label^="Tab Groups"]').click();
+    return this.sidebar();
+  }
+
+  /** The Tab Groups view's page, once it has drawn the tabs. */
+  async sidebar(): Promise<Frame> {
+    for (const start = Date.now(); Date.now() - start < 10_000; await this.idle(50)) {
+      for (const frame of this.page.frames()) {
+        if (await frame.$('#root .row').catch(() => null)) {
+          return frame;
+        }
+      }
+    }
+    throw new Error('The Tab Groups view did not open');
+  }
+
+  /**
+   * The side bar as text, one line per row: a group header as `[name]` (`[name +]` when collapsed),
+   * a tab as its name, indented when it is in a group.
+   */
+  async sidebarLines(): Promise<string[]> {
+    const frame = await this.sidebar();
+    return frame.evaluate(() =>
+      [...document.querySelectorAll('.group-header, .tab')].map((el) =>
+        el.classList.contains('group-header')
+          ? '[' + el.querySelector('.group-name')!.textContent + (el.closest('.group')!.classList.contains('collapsed') ? ' +' : '') + ']'
+          : (el.closest('.members') ? '  ' : '') + el.querySelector('.label')!.textContent,
+      ),
+    );
+  }
+
+  /** Drags a tab in the side bar onto another tab (its upper or lower half), with the mouse. */
+  async dragInSidebar(tab: string, onto: string, half: 'upper' | 'lower'): Promise<void> {
+    const frame = await this.sidebar();
+    const named = (name: string) => frame.locator('.tab', { has: frame.locator('.label', { hasText: new RegExp(`^${escapeRegExp(name)}$`) }) });
+    const target = named(onto);
+    const box = await target.boundingBox();
+    await named(tab)
+      .dragTo(target, { targetPosition: { x: 40, y: half === 'upper' ? 4 : box!.height - 4 } });
+  }
+
+  /** Hovers a group header in the side bar and clicks its ⋮ button (`group` '' = the unnamed group). */
+  async openSidebarGroupSettings(group: string): Promise<Frame> {
+    const frame = await this.sidebar();
+    const header = frame.locator('.group-header').filter({ has: frame.locator('.group-name', { hasText: new RegExp(`^${escapeRegExp(group)}$`) }) });
+    await header.hover();
+    await header.locator('.more').click();
+    await frame.locator('.popup').waitFor();
+    return frame;
+  }
+
+  /** Clicks a tab in the side bar, optionally with Ctrl or Shift held (to select several). */
+  async clickSidebarTab(name: string, modifiers: ('Control' | 'Shift')[] = []): Promise<void> {
+    const frame = await this.sidebar();
+    await frame.locator('.tab', { has: frame.locator('.label', { hasText: new RegExp(`^${escapeRegExp(name)}$`) }) }).click({ modifiers });
+  }
+
+  /** How many times the tab bar script has redrawn the groups so far. */
+  tabBarRenders(): Promise<number> {
+    return this.page.evaluate(() => window.__tabGroupsPatch?.renders ?? 0);
+  }
+
+  /** Right-clicks a tab in the side bar and picks an item from its context menu. */
+  async sidebarTabMenu(name: string, item: string): Promise<void> {
+    const frame = await this.sidebar();
+    await frame.locator('.tab', { has: frame.locator('.label', { hasText: new RegExp(`^${escapeRegExp(name)}$`) }) }).click({ button: 'right' });
+    await this.chooseContextMenuItem(item);
+  }
+
+  /** Names of the tabs selected (Ctrl/Shift+click) in the side bar. */
+  async sidebarSelection(): Promise<string[]> {
+    const frame = await this.sidebar();
+    return frame.locator('.tab.selected .label').allTextContents();
+  }
+
+  /** Clicks a group header in the side bar. */
+  async clickSidebarHeader(group: string): Promise<void> {
+    const frame = await this.sidebar();
+    await frame.locator('.group-header', { hasText: group }).click();
+  }
+
   // ------------------------------------------------------------------ internals
 
   private tabLocator(name: string) {
@@ -702,6 +790,7 @@ declare global {
     __tabGroupsPatch?: {
       connected: boolean;
       state: { groups: { id: string; name: string; color: string; collapsed: boolean }[] } | null;
+      renders: number;
     };
   }
 }

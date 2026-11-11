@@ -15,6 +15,8 @@ export const STORAGE_KEY = 'tabPalette.v1';
  */
 export class GroupStore implements vscode.Disposable {
   private groups: TabGroup[];
+  /** File → group, for groupOf; dropped on every change (see commit). */
+  private index: Map<string, TabGroup> | undefined;
   private readonly emitter = new vscode.EventEmitter<void>();
   readonly onDidChange = this.emitter.event;
 
@@ -30,8 +32,12 @@ export class GroupStore implements vscode.Disposable {
     return this.groups.find((g) => g.id === id);
   }
 
+  /** Looked up for every tab on every tab change, so it reads a map built once per change. */
   groupOf(uri: string): TabGroup | undefined {
-    return this.groups.find((g) => g.uris.includes(uri));
+    if (!this.index) {
+      this.index = new Map(this.groups.flatMap((g) => g.uris.map((u) => [u, g] as const)));
+    }
+    return this.index.get(uri);
   }
 
   /** First color not used by any group, cycling when all are taken. */
@@ -187,6 +193,7 @@ export class GroupStore implements vscode.Disposable {
   }
 
   private commit(): void {
+    this.index = undefined;
     void this.storage.update(STORAGE_KEY, this.groups);
     this.emitter.fire();
   }

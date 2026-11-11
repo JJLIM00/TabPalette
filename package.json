@@ -2,7 +2,7 @@
   "name": "tabpalette",
   "displayName": "TabPalette - Tab Groups",
   "description": "Chrome-style tab groups on the VS Code tab bar: named, colored groups you can collapse, drag tabs into, and reorder.",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "publisher": "JJLIM00",
   "license": "MIT",
   "repository": {
@@ -229,6 +229,53 @@
           "command": "tabPalette.moveToGroup",
           "when": "false"
         }
+      ],
+      "webview/context": [
+        {
+          "command": "tabPalette.addToGroup",
+          "group": "1_tabpalette@1",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'tab'"
+        },
+        {
+          "command": "tabPalette.addToNewGroup",
+          "group": "1_tabpalette@2",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'tab'"
+        },
+        {
+          "command": "tabPalette.moveToGroup",
+          "group": "1_tabpalette@1",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'groupedTab'"
+        },
+        {
+          "command": "tabPalette.removeFromGroup",
+          "group": "1_tabpalette@2",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'groupedTab'"
+        },
+        {
+          "command": "tabPalette.addSelectedToGroup",
+          "group": "1_tabpalette@1",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'selectedTabs'"
+        },
+        {
+          "command": "tabPalette.addSelectedToNewGroup",
+          "group": "1_tabpalette@2",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'selectedTabs'"
+        },
+        {
+          "command": "tabPalette.removeSelectedFromGroup",
+          "group": "1_tabpalette@3",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'selectedTabs'"
+        },
+        {
+          "command": "tabPalette.openGroup",
+          "group": "1_closed@1",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'closedGroup'"
+        },
+        {
+          "command": "tabPalette.deleteGroup",
+          "group": "1_closed@2",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'closedGroup'"
+        }
       ]
     },
     "keybindings": [
@@ -361,7 +408,25 @@
         "id": "tabPalette.tabSubmenu",
         "label": "Tab Group"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tabPalette",
+          "title": "Tab Groups",
+          "icon": "resources/sidebar/tabs.svg"
+        }
+      ]
+    },
+    "views": {
+      "tabPalette": [
+        {
+          "type": "webview",
+          "id": "tabPalette.sidebar",
+          "name": "Tabs"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run package",

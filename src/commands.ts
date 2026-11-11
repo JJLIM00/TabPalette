@@ -15,6 +15,8 @@ export interface CommandDeps {
   layout: Layout;
   /** Undefined until the workbench patch is enabled. */
   bridge: () => Bridge | undefined;
+  /** Opens the group settings in the side bar; false when the side bar is not shown. */
+  editInSidebar?: (groupId: string) => boolean;
 }
 
 export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps): (action: UiAction) => Promise<void> {
@@ -61,12 +63,14 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
   }
 
   /** Chrome: a new group gets the next color and opens its editor bubble right away. */
-  async function createGroup(uris: string[]): Promise<TabGroup> {
+  async function createGroup(uris: string[], fromSidebar = false): Promise<TabGroup> {
     await layout.unpin(uris);
     const group = store.create('', store.nextColor(), uris);
     await layout.placeInGroup(uris);
     const bridge = deps.bridge();
-    if (bridge && bridge.connections > 0) {
+    if (fromSidebar && deps.editInSidebar?.(group.id)) {
+      // Made from the side bar's menu: the settings open there.
+    } else if (bridge && bridge.connections > 0) {
       bridge.requestEdit(group.id);
     } else {
       const name = await promptName();
@@ -88,7 +92,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
   // ---------- argument resolution ----------
 
   function resolveFiles(arg: unknown, multi: unknown): string[] {
-    const toString = (x: unknown): string | undefined => (x instanceof vscode.Uri ? x.toString() : undefined);
+    const toString = (x: unknown): string | undefined => (x instanceof vscode.Uri ? x.toString() : sidebarArg(x).uri);
     if (Array.isArray(multi) && multi.length > 0) {
       const all = multi.map(toString).filter((s): s is string => !!s);
       if (all.length > 0) {
@@ -100,6 +104,13 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
   }
 
   async function resolveGroup(arg: unknown, action: string): Promise<TabGroup | undefined> {
+    const fromSidebar = sidebarArg(arg);
+    if (fromSidebar.groupId) {
+      return store.get(fromSidebar.groupId);
+    }
+    if (fromSidebar.uri) {
+      arg = vscode.Uri.parse(fromSidebar.uri);
+    }
     if (typeof arg === 'string') {
       return store.get(arg);
     }
@@ -129,8 +140,13 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
   const noFiles = () => void vscode.window.showInformationMessage('Open a file to add it to a tab group.');
 
   /** The selected tabs for a tab context-menu command (`arg` = the right-clicked tab). */
-  const selectedTabs = (arg: unknown) =>
-    selectedTabUris(arg instanceof vscode.Uri ? arg : undefined, (anchor) => deps.bridge()?.selectedUris(anchor));
+  const selectedTabs = async (arg: unknown) => {
+    const fromSidebar = sidebarArg(arg).uris; // the tabs selected in the side bar
+    if (fromSidebar && fromSidebar.length > 0) {
+      return fromSidebar;
+    }
+    return selectedTabUris(arg instanceof vscode.Uri ? arg : undefined, (anchor) => deps.bridge()?.selectedUris(anchor));
+  };
 
   // ---------- group actions (shared by commands and the chip editor) ----------
 
@@ -184,14 +200,14 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
         ? await pickGroup(uris.length > 1 ? `Add ${uris.length} tabs to group` : 'Add tab to group', current?.id)
         : NEW_GROUP;
       if (id === NEW_GROUP) {
-        await createGroup(uris);
+        await createGroup(uris, isSidebarArg(arg));
       } else if (id) {
         await addTo(id, uris);
       }
     },
     'tabPalette.addToNewGroup': async (arg, multi) => {
       const uris = resolveFiles(arg, multi);
-      return uris.length === 0 ? noFiles() : createGroup(uris);
+      return uris.length === 0 ? noFiles() : createGroup(uris, isSidebarArg(arg));
     },
     'tabPalette.moveToGroup': (arg, multi) => commands['tabPalette.addToGroup'](arg, multi),
     'tabPalette.removeFromGroup': async (arg, multi) => {
@@ -210,11 +226,11 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     },
     'tabPalette.addSelectedToGroup': async (arg) => {
       const uris = await selectedTabs(arg);
-      return commands['tabPalette.addToGroup'](undefined, uris.map((u) => vscode.Uri.parse(u)));
+      return commands['tabPalette.addToGroup'](isSidebarArg(arg) ? arg : undefined, uris.map((u) => vscode.Uri.parse(u)));
     },
     'tabPalette.addSelectedToNewGroup': async (arg) => {
       const uris = await selectedTabs(arg);
-      return commands['tabPalette.addToNewGroup'](undefined, uris.map((u) => vscode.Uri.parse(u)));
+      return commands['tabPalette.addToNewGroup'](isSidebarArg(arg) ? arg : undefined, uris.map((u) => vscode.Uri.parse(u)));
     },
     'tabPalette.removeSelectedFromGroup': async (arg) => {
       const uris = await selectedTabs(arg);
@@ -224,6 +240,9 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     'tabPalette.editGroup': async (arg) => {
       const group = await resolveGroup(arg, 'edit');
       if (!group) {
+        return;
+      }
+      if (isSidebarArg(arg) && !group.closed && deps.editInSidebar?.(group.id)) {
         return;
       }
       const bridge = deps.bridge();
@@ -341,6 +360,27 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     if (group && handler) {
       await handler(group, action.value);
     }
+  };
+}
+
+/**
+ * A command run from the side bar's context menu gets the right-clicked item's context:
+ * `{ webviewSection, uri }` for a tab, `{ webviewSection, uris }` for selected tabs,
+ * `{ webviewSection, groupId }` for a group.
+ */
+function isSidebarArg(arg: unknown): boolean {
+  return !!arg && typeof arg === 'object' && typeof (arg as { webviewSection?: unknown }).webviewSection === 'string';
+}
+
+function sidebarArg(arg: unknown): { uri?: string; uris?: string[]; groupId?: string } {
+  const a = arg as { webviewSection?: unknown; uri?: unknown; uris?: unknown; groupId?: unknown } | undefined;
+  if (!a || typeof a !== 'object' || typeof a.webviewSection !== 'string') {
+    return {};
+  }
+  return {
+    uri: typeof a.uri === 'string' ? a.uri : undefined,
+    uris: Array.isArray(a.uris) ? a.uris.filter((u): u is string => typeof u === 'string') : undefined,
+    groupId: typeof a.groupId === 'string' ? a.groupId : undefined,
   };
 }
 

@@ -14,7 +14,8 @@ import { tabUri } from './tabs';
  *   accessibility label of a hidden status bar item, which the patch reads from the DOM.
  * - Extension → UI: `state` (groups + each tab row's labels and group ids).
  * - UI → extension: `action` messages (collapse, rename, color, close, …), and
- *   `selection` (which tabs are selected, sent when a tab is right-clicked).
+ *   `tabSelection` (the selected tabs of every tab row, sent whenever they change).
+ * - Extension → UI, for the side bar: `click` (Ctrl/Shift+click a tab, to select it).
  */
 
 export const BRIDGE_LABEL_PREFIX = 'tab-groups-bridge:';
@@ -56,8 +57,11 @@ export class Bridge implements vscode.Disposable {
   private item: vscode.StatusBarItem | undefined;
   private readonly subscriptions: vscode.Disposable[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
-  /** The tab selection the tab bar last reported (tab row + positions of the selected tabs). */
-  private selection: { row: number; indexes: number[]; at: number } | undefined;
+  /** The selected tabs of each tab row, kept up to date by the tab bar (positions in the row). */
+  private tabSelection = new Map<number, number[]>();
+  private readonly selectionEmitter = new vscode.EventEmitter<void>();
+  /** The tab bar's selection changed (see selectedIndexes). */
+  readonly onDidChangeSelection = this.selectionEmitter.event;
 
   constructor(
     private readonly store: GroupStore,
@@ -75,18 +79,32 @@ export class Bridge implements vscode.Disposable {
   }
 
   /**
-   * The selected tabs (URI strings), as the tab bar reported them when a tab was just
-   * right-clicked. Undefined when there is no recent report, or `anchor` (the tab the
-   * command is for) is not part of it; callers then fall back to other ways.
+   * The tabs (URI strings) a "selected tabs" command applies to, for the tab `anchor` it is
+   * run on: all the selected tabs of its row when `anchor` is one of them, else just
+   * `anchor`, like VS Code's own tab commands. Undefined when the tab bar has not reported
+   * that row; callers then fall back to other ways.
    */
-  selectedUris(anchor: string, maxAgeMs = 60_000): string[] | undefined {
-    const s = this.selection;
-    const row = s ? this.rows()[s.row] : undefined;
-    if (!s || !row || Date.now() - s.at > maxAgeMs) {
-      return undefined;
+  selectedUris(anchor: string): string[] | undefined {
+    const rows = this.rows();
+    for (const [index, selected] of this.tabSelection) {
+      const row = rows[index];
+      const uris = row ? row.tabs.map((t) => tabUri(t)?.toString()) : [];
+      if (uris.includes(anchor)) {
+        const chosen = selected.map((i) => uris[i]).filter((u): u is string => !!u);
+        return chosen.includes(anchor) ? chosen : [anchor];
+      }
     }
-    const uris = s.indexes.map((i) => (row.tabs[i] ? tabUri(row.tabs[i])?.toString() : undefined)).filter((u): u is string => !!u);
-    return uris.includes(anchor) ? uris : undefined;
+    return undefined;
+  }
+
+  /** Positions of the tabs selected in the tab bar in tab row `row` (the active tab counts as selected). */
+  selectedIndexes(row: number): number[] {
+    return this.tabSelection.get(row) ?? [];
+  }
+
+  /** Clicks a tab in the tab bar with Ctrl or Shift held, so VS Code selects it (from the side bar). */
+  clickTab(row: number, index: number, label: string, modifiers: { ctrl?: boolean; meta?: boolean; shift?: boolean }): void {
+    this.sendAll(JSON.stringify({ type: 'click', row, index, label, ctrl: !!modifiers.ctrl, meta: !!modifiers.meta, shift: !!modifiers.shift }));
   }
 
   async start(): Promise<void> {
@@ -125,7 +143,7 @@ export class Bridge implements vscode.Disposable {
     let authed = false;
     const timeout = setTimeout(() => !authed && socket.close(1008, 'auth timeout'), 5000);
     socket.on('message', (data) => {
-      let msg: { type?: string; token?: string; action?: string; groupId?: string; value?: unknown; row?: unknown; indexes?: unknown };
+      let msg: { type?: string; token?: string; action?: string; groupId?: string; value?: unknown; rows?: unknown };
       try {
         msg = JSON.parse(data.toString());
       } catch {
@@ -147,11 +165,14 @@ export class Bridge implements vscode.Disposable {
         socket.send(JSON.stringify(buildState(this.store, this.rows())));
         return;
       }
-      if (msg.type === 'selection') {
-        const indexes = Array.isArray(msg.indexes) ? msg.indexes.filter((i): i is number => Number.isInteger(i) && i >= 0) : [];
-        if (Number.isInteger(msg.row) && indexes.length > 0) {
-          this.selection = { row: msg.row as number, indexes, at: Date.now() };
-        }
+      if (msg.type === 'tabSelection') {
+        const rows = Array.isArray(msg.rows) ? (msg.rows as { row?: unknown; indexes?: unknown }[]) : [];
+        this.tabSelection = new Map(
+          rows
+            .filter((r) => Number.isInteger(r?.row) && Array.isArray(r.indexes))
+            .map((r) => [r.row as number, (r.indexes as unknown[]).filter((i): i is number => Number.isInteger(i) && (i as number) >= 0)]),
+        );
+        this.selectionEmitter.fire();
         return;
       }
       if (msg.type === 'action' && typeof msg.action === 'string' && typeof msg.groupId === 'string') {
@@ -165,12 +186,19 @@ export class Bridge implements vscode.Disposable {
     socket.on('close', () => {
       clearTimeout(timeout);
       this.clients.delete(socket);
+      if (this.clients.size === 0 && this.tabSelection.size > 0) {
+        this.tabSelection.clear();
+        this.selectionEmitter.fire();
+      }
     });
     socket.on('error', () => socket.close());
   }
 
   /** Sends fresh state to the UI (debounced; tab events come in bursts). */
   schedule(): void {
+    if (this.clients.size === 0) {
+      return;
+    }
     if (this.timer) {
       clearTimeout(this.timer);
     }
@@ -187,19 +215,24 @@ export class Bridge implements vscode.Disposable {
       this.timer = undefined;
     }
     this.broadcast();
-    const message = JSON.stringify({ type: 'edit', groupId });
-    for (const client of this.clients) {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
-    }
+    this.sendAll(JSON.stringify({ type: 'edit', groupId }));
   }
 
+  /** Sends the state to the tab bar, unless it already has this exact state (it would redraw for nothing). */
   broadcast(): void {
     if (this.clients.size === 0) {
       return;
     }
     const message = JSON.stringify(buildState(this.store, this.rows()));
+    if (message !== this.lastState) {
+      this.lastState = message;
+      this.sendAll(message);
+    }
+  }
+
+  private lastState: string | undefined;
+
+  private sendAll(message: string): void {
     for (const client of this.clients) {
       if (client.readyState === WebSocket.OPEN) {
         client.send(message);
@@ -212,6 +245,7 @@ export class Bridge implements vscode.Disposable {
       clearTimeout(this.timer);
     }
     this.subscriptions.forEach((d) => d.dispose());
+    this.selectionEmitter.dispose();
     this.item?.dispose();
     for (const client of this.clients) {
       client.close();

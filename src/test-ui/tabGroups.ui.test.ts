@@ -301,6 +301,22 @@ suite('TabPalette — used like a person would', function () {
 
   // ------------------------------------------------------------------ collapse and expand
 
+  suite('performance', () => {
+    test('typing in the editor and the blinking cursor do not redraw the tab bar', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt']);
+      await vscode.clickTab('a.txt');
+      await vscode.page.keyboard.press('Control+End');
+      await vscode.page.waitForTimeout(500);
+      const before = await vscode.tabBarRenders();
+      await vscode.page.keyboard.type('some typing', { delay: 20 });
+      await vscode.page.waitForTimeout(1500); // the cursor blinks a few times
+      const redraws = (await vscode.tabBarRenders()) - before;
+      // Only the tab turning "unsaved" may redraw it (once, maybe twice), not every key or blink.
+      assert.ok(redraws <= 2, `the tab bar was redrawn ${redraws} times`);
+      await vscode.runCommand('File: Revert File');
+    });
+  });
+
   suite('collapsing and expanding', () => {
     test("clicking the chip hides the group's tabs and keeps the chip; clicking again shows them", async () => {
       await makeGroup('Main', ['a.txt', 'b.txt']);
@@ -321,6 +337,20 @@ suite('TabPalette — used like a person would', function () {
       await vscode.clickChip('Main');
       const active = (await vscode.tabs()).find((t) => t.active)!;
       assert.ok(!['a.txt', 'b.txt'].includes(active.name), `active is now ${active.name}`);
+    });
+
+    test('collapsing every group leaves a new empty file in no group, instead of a hidden tab', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt']);
+      await makeGroup('Work', ['c.txt', 'd.txt']);
+      await vscode.clickTab('b.txt');
+      await vscode.clickChip('Main');
+      await vscode.waitUntil('c.txt is active', async () => (await vscode.tab('c.txt')).active);
+      await vscode.clickChip('Work');
+      await vscode.waitUntil('only a new empty file is shown', async () => (await vscode.tabNames()).join() === 'Untitled-1');
+      const shown = await vscode.tab('Untitled-1');
+      assert.strictEqual(shown.active, true);
+      assert.strictEqual(shown.group, null, 'the new file is in no group');
+      assert.deepStrictEqual((await vscode.chips()).map((c) => [c.name, c.collapsed]), [['Main', true], ['Work', true]]);
     });
 
     test('opening a hidden tab with Quick Open expands its group', async () => {
@@ -658,6 +688,129 @@ suite('TabPalette — used like a person would', function () {
       assert.strictEqual(await groupOf('a.txt'), 'Main');
       assert.strictEqual(await groupOf('b.txt'), 'Main');
       assert.strictEqual((await vscode.tab('c.txt')).hidden, true, 'Work is still collapsed');
+    });
+  });
+
+  // ------------------------------------------------------------------ the Tab Groups side bar
+
+  suite('the Tab Groups side bar', () => {
+    teardown(async () => {
+      await vscode.runCommand('View: Show Explorer'); // other tests click files in the Explorer
+    });
+
+    test('lists the tabs top to bottom, each group under a header in its color', async () => {
+      await makeGroup('House move', ['a.txt', 'b.txt'], 'Blue');
+      await makeGroup('To read', ['c.txt'], 'Red');
+      const frame = await vscode.openSidebar();
+      await vscode.waitUntil('the side bar shows both groups', async () =>
+        (await vscode.sidebarLines()).join('|') === '[House move]|  a.txt|  b.txt|[To read]|  c.txt|d.txt',
+      );
+      const header = await frame.locator('.group-header', { hasText: 'House move' }).evaluate((el) => getComputedStyle(el).backgroundColor);
+      assert.strictEqual(header, COLORS.Blue);
+    });
+
+    test('a tab dragged onto a group in the side bar joins it there, in the tab bar too', async () => {
+      await makeGroup('House move', ['a.txt', 'b.txt'], 'Blue');
+      await vscode.openSidebar();
+      await vscode.dragInSidebar('d.txt', 'b.txt', 'upper');
+      await vscode.waitUntil('d.txt joined House move', async () => (await vscode.tab('d.txt')).group === 'House move');
+      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'd.txt', 'b.txt', 'c.txt']);
+      await vscode.waitUntil('the side bar shows it', async () => (await vscode.sidebarLines()).includes('  d.txt'));
+    });
+
+    test('Ctrl+click and Shift+click select several tabs; dragging one drags them all into a group', async () => {
+      await makeGroup('Main', ['a.txt'], 'Blue');
+      await vscode.openSidebar();
+      await vscode.clickSidebarTab('b.txt');
+      await vscode.waitUntil('b.txt is active', async () => (await vscode.tab('b.txt')).active);
+      const selection = (names: string[], what: string) =>
+        vscode.waitUntil(what, async () => (await vscode.sidebarSelection()).join() === names.join());
+      // The tab bar is connected, so these are VS Code's own selection rules.
+      await vscode.clickSidebarTab('d.txt', ['Control']);
+      await selection(['b.txt', 'd.txt'], 'Ctrl+click adds to the active tab');
+      await vscode.clickSidebarTab('b.txt', ['Control']);
+      await selection([], 'Ctrl+click on a selected tab removes it (one tab left is just the active tab)');
+      await vscode.clickSidebarTab('b.txt', ['Shift']);
+      await selection(['b.txt', 'c.txt', 'd.txt'], 'Shift+click selects the range');
+      await vscode.dragInSidebar('d.txt', 'a.txt', 'lower');
+      await vscode.waitUntil('all three joined Main', async () => (await vscode.tabs()).filter((t) => t.group === 'Main').length === 4);
+      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'b.txt', 'c.txt', 'd.txt']);
+      await vscode.clickSidebarTab('a.txt');
+      await selection([], 'a plain click clears the selection');
+    });
+
+    test('the selection is the same in the side bar and the tab bar', async () => {
+      await vscode.openSidebar();
+      await vscode.clickSidebarTab('a.txt');
+      await vscode.waitUntil('a.txt is active', async () => (await vscode.tab('a.txt')).active);
+      const tabBarSelection = async () => (await vscode.tabs()).filter((t) => t.selected).map((t) => t.name).join();
+      await vscode.clickSidebarTab('c.txt', ['Control']);
+      await vscode.waitUntil('the tab bar selects a.txt and c.txt', async () => (await tabBarSelection()) === 'a.txt,c.txt');
+      await vscode.clickTab('d.txt', ['Control']);
+      await vscode.waitUntil('the side bar shows a.txt, c.txt and d.txt', async () => (await vscode.sidebarSelection()).join() === 'a.txt,c.txt,d.txt');
+      await vscode.clickTab('b.txt');
+      await vscode.waitUntil('a plain click in the tab bar clears the side bar selection', async () => (await vscode.sidebarSelection()).length === 0);
+    });
+
+    test('right-click a tab in the side bar → "Add Tab to New Group" opens the group settings in the side bar', async () => {
+      const frame = await vscode.openSidebar();
+      await vscode.sidebarTabMenu('c.txt', 'Add Tab to New Group');
+      await frame.locator('.popup').waitFor({ timeout: 5000 });
+      assert.strictEqual(await vscode.editorIsOpen(), false, 'not on the tab bar');
+      await vscode.type('Later');
+      await vscode.press('Enter');
+      await vscode.waitUntil('the side bar shows the named group', async () => (await vscode.sidebarLines()).includes('[Later]'));
+      assert.strictEqual((await vscode.tab('c.txt')).group, 'Later');
+    });
+
+    test('right-click on a group header opens the group settings popup, not a VS Code menu', async () => {
+      await makeGroup('Main', ['a.txt'], 'Blue');
+      const frame = await vscode.openSidebar();
+      await frame.locator('.group-header', { hasText: 'Main' }).click({ button: 'right' });
+      await frame.locator('.popup').waitFor({ timeout: 5000 });
+      await vscode.page.waitForTimeout(300);
+      assert.strictEqual(await vscode.page.locator('.context-view .monaco-menu').count(), 0, 'no VS Code context menu');
+      await vscode.press('Escape');
+      await frame.locator('.popup').waitFor({ state: 'detached', timeout: 5000 });
+    });
+
+    test("an unnamed group's header is as wide as a named one", async () => {
+      await makeGroup('Main', ['a.txt'], 'Blue');
+      await makeGroup('', ['c.txt'], 'Red');
+      const frame = await vscode.openSidebar();
+      const widths = await frame.locator('.group-header').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
+      assert.strictEqual(widths.length, 2);
+      assert.strictEqual(widths[1], widths[0]);
+    });
+
+    test('⋮ on a group header opens the group settings: name, color and the group menu', async () => {
+      await makeGroup('', ['a.txt'], 'Blue');
+      await vscode.openSidebar();
+      const frame = await vscode.openSidebarGroupSettings('');
+      await vscode.type('House move');
+      await vscode.waitUntil('the chip shows the new name', async () => !!(await vscode.chip('House move')));
+      await frame.locator('.popup .color[title="Color 3"]').click();
+      await vscode.waitUntil('the chip is red', async () => (await vscode.chip('House move'))?.color === COLORS.Red);
+      assert.deepStrictEqual(
+        await frame.locator('.popup .item-text').allTextContents(),
+        ['New tab in group', 'Move group to new window', 'Close group', 'Ungroup', 'Delete group'],
+      );
+      await frame.locator('.popup .item', { hasText: 'Close group' }).click();
+      await vscode.waitUntil('the group is closed', async () => !(await vscode.chip('House move')));
+      assert.deepStrictEqual(await vscode.tabNames(), ['b.txt', 'c.txt', 'd.txt']);
+      const closed = frame.locator('.closed-group', { hasText: 'House move' });
+      await vscode.waitUntil('it is listed under Closed groups', async () => (await closed.count()) === 1);
+      // Reopen it from the list (and so leave no closed group behind for the next tests).
+      await closed.click();
+      await vscode.waitUntil('the group is back', async () => !!(await vscode.chip('House move')));
+    });
+
+    test('a click on a group header collapses the group in the side bar and on the tab bar', async () => {
+      await makeGroup('To read', ['c.txt'], 'Red');
+      await vscode.openSidebar();
+      await vscode.clickSidebarHeader('To read');
+      await vscode.waitUntil('the chip is collapsed', async () => (await vscode.chip('To read'))?.collapsed === true);
+      await vscode.waitUntil('the side bar shows it collapsed', async () => (await vscode.sidebarLines()).join('|') === 'a.txt|b.txt|[To read +]|d.txt');
     });
   });
 

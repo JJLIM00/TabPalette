@@ -357,6 +357,27 @@ suite('TabPalette in a real VS Code window', () => {
       assert.strictEqual(group(g)!.collapsed, false);
     });
 
+    test('collapsing skips tabs hidden in other collapsed groups; with nothing left to show, a new empty file opens outside any group', async () => {
+      const main = makeGroup('Main', 'color3', ['a.txt', 'b.txt']);
+      const work = makeGroup('Work', 'color5', ['c.txt', 'd.txt']);
+      await open('a.txt');
+      await run('tabPalette.toggleCollapse', main.id);
+      await settle();
+      assert.strictEqual(activeTab(), 'c.txt');
+
+      await run('tabPalette.toggleCollapse', work.id);
+      await settle();
+      assert.strictEqual(group(work)!.collapsed, true);
+      assert.strictEqual(group(main)!.collapsed, true, 'the other group stays collapsed');
+      const active = vscode.window.tabGroups.activeTabGroup.activeTab!;
+      const uri = tabUri(active)!;
+      assert.strictEqual(uri.scheme, 'untitled', 'a new empty file is shown');
+      assert.strictEqual(vscode.window.activeTextEditor?.document.getText(), '');
+      assert.strictEqual(api.store.groupOf(uri.toString()), undefined, 'the new file is in no group');
+      assert.deepStrictEqual(tabBar().slice(0, 4), ['a.txt', 'b.txt', 'c.txt', 'd.txt'], 'the collapsed tabs stay open, and the new file is last');
+      assert.strictEqual(tabBar().length, 5);
+    });
+
     test('opening a hidden tab (Quick Open, Explorer…) expands its collapsed group', async () => {
       const g = makeGroup('Main', 'color3', ['a.txt', 'b.txt']);
       await run('tabPalette.toggleCollapse', g.id);
@@ -476,6 +497,146 @@ suite('TabPalette in a real VS Code window', () => {
   });
 
   // Runs last: once the tab bar UI is connected, new groups open the chip editor instead of a prompt.
+  suite('the Tab Groups side bar', () => {
+    /** A tab of the first tab row, as the side bar page refers to it. */
+    const tabRef = (name: string) => ({ row: 0, index: tabBar().indexOf(name), key: id(name) });
+    const sidebar = (message: Record<string, unknown>) => api.sidebar.handle(message);
+
+    test('opens from its Activity Bar icon and lists the tabs in tab bar order, with their groups', async () => {
+      await run('workbench.view.extension.tabPalette');
+      const main = makeGroup('Main', 'color5', ['a.txt', 'b.txt']);
+      const { rows, groups } = api.sidebar.state();
+      assert.deepStrictEqual(
+        rows[0].tabs.map((t) => [t.label, t.groupId === main.id]),
+        [['a.txt', true], ['b.txt', true], ['c.txt', false], ['d.txt', false]],
+      );
+      assert.strictEqual(rows[0].tabs.find((t) => t.active)?.label, 'd.txt');
+      assert.deepStrictEqual(groups.map((g) => [g.name, g.color, g.count]), [['Main', 'color5', 2]]);
+    });
+
+    test('a click opens the tab; the close button closes it', async () => {
+      await sidebar({ type: 'activate', ...tabRef('b.txt') });
+      await waitFor('b.txt is active', () => activeTab() === 'b.txt');
+      await sidebar({ type: 'close', ...tabRef('c.txt') });
+      await waitFor('c.txt is closed', () => !isOpen('c.txt'));
+    });
+
+    test('a message about a tab that has moved since is ignored', async () => {
+      await sidebar({ type: 'close', row: 0, index: 0, key: id('d.txt') });
+      await settle();
+      assert.deepStrictEqual(tabBar(), ['a.txt', 'b.txt', 'c.txt', 'd.txt']);
+    });
+
+    test('clicking a group header collapses and expands the group', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
+      await sidebar({ type: 'toggle', groupId: main.id });
+      assert.strictEqual(group(main)?.collapsed, true);
+      await sidebar({ type: 'toggle', groupId: main.id });
+      assert.strictEqual(group(main)?.collapsed, false);
+    });
+
+    test('a tab dropped on a tab of a group joins the group at that spot', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
+      await sidebar({ type: 'dropTab', ...tabRef('d.txt'), target: { index: 1, after: false } });
+      assert.deepStrictEqual(tabBar(), ['a.txt', 'd.txt', 'b.txt', 'c.txt']);
+      assert.deepStrictEqual(members(main), ['a.txt', 'd.txt', 'b.txt']);
+      assert.strictEqual(activeTab(), 'd.txt', 'd.txt was already the active tab');
+    });
+
+    test('a grouped tab dropped below all tabs leaves its group; the active tab stays active', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
+      await sidebar({ type: 'dropTab', ...tabRef('a.txt'), target: { end: true } });
+      assert.deepStrictEqual(tabBar(), ['b.txt', 'c.txt', 'd.txt', 'a.txt']);
+      assert.deepStrictEqual(members(main), ['b.txt']);
+      assert.strictEqual(activeTab(), 'd.txt');
+    });
+
+    test('a group dragged by its header moves with all its tabs', async () => {
+      makeGroup('Work', 'color3', ['c.txt', 'd.txt']);
+      const work = groupByName('Work')!;
+      await sidebar({ type: 'dropGroup', row: 0, groupId: work.id, target: { index: 0, after: false } });
+      await waitFor('Work is first', () => tabBar().join(' ') === 'c.txt d.txt a.txt b.txt');
+    });
+
+    test('several selected tabs dropped on a group all join it, side by side', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt']);
+      await sidebar({ type: 'dropTabs', row: 0, tabs: [tabRef('b.txt'), tabRef('d.txt')], target: { header: main.id } });
+      await waitFor('the tabs moved', () => tabBar().join(' ') === 'b.txt d.txt a.txt c.txt');
+      assert.deepStrictEqual(members(main), ['b.txt', 'd.txt', 'a.txt']);
+    });
+
+    test('several selected tabs dropped below all tabs leave their group (unless the whole group goes along)', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt', 'c.txt']);
+      await sidebar({ type: 'dropTabs', row: 0, tabs: [tabRef('a.txt'), tabRef('b.txt')], target: { end: true } });
+      await waitFor('the tabs moved', () => tabBar().join(' ') === 'c.txt d.txt a.txt b.txt');
+      assert.deepStrictEqual(members(main), ['c.txt']);
+    });
+
+    test('Delete on selected tabs closes them all; a stale selection is ignored', async () => {
+      await sidebar({ type: 'closeTabs', row: 0, tabs: [tabRef('a.txt'), { row: 0, index: 1, key: id('c.txt') }] });
+      await settle();
+      assert.deepStrictEqual(tabBar(), ['a.txt', 'b.txt', 'c.txt', 'd.txt'], 'c.txt is not at index 1: nothing closes');
+      await sidebar({ type: 'closeTabs', row: 0, tabs: [tabRef('a.txt'), tabRef('c.txt')] });
+      await waitFor('both are closed', () => !isOpen('a.txt') && !isOpen('c.txt'));
+      assert.deepStrictEqual(tabBar(), ['b.txt', 'd.txt']);
+    });
+
+    test('the right-click menu on selected tabs acts on all of them; the new group opens its settings in the side bar', async () => {
+      answerPrompts({ type: 'should not be asked' });
+      await run('tabPalette.addSelectedToNewGroup', { webviewSection: 'selectedTabs', uris: [id('a.txt'), id('c.txt')] });
+      assert.deepStrictEqual(api.store.all().map((g) => [g.name, g.uris.map(nameOf)]), [['', ['a.txt', 'c.txt']]]);
+      assert.strictEqual(api.sidebar.lastEdit, api.store.all()[0].id, 'named in the side bar popup, not in a prompt');
+      await run('tabPalette.removeSelectedFromGroup', { webviewSection: 'selectedTabs', uris: [id('a.txt'), id('c.txt')] });
+      assert.strictEqual(api.store.all().length, 0);
+    });
+
+    test('the ⋮ group settings: rename, recolor, ungroup; anything else is ignored', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
+      await sidebar({ type: 'groupAction', groupId: main.id, action: 'rename', value: 'House move' });
+      await sidebar({ type: 'groupAction', groupId: main.id, action: 'setColor', value: 'color4' });
+      await sidebar({ type: 'groupAction', groupId: main.id, action: 'setColor', value: 'pink' });
+      await sidebar({ type: 'groupAction', groupId: main.id, action: 'moveGroup', value: { row: 0, index: 3 } });
+      assert.strictEqual(group(main)?.name, 'House move');
+      assert.strictEqual(group(main)?.color, 'color4');
+      assert.deepStrictEqual(tabBar(), ['a.txt', 'b.txt', 'c.txt', 'd.txt'], 'moveGroup is not a popup action');
+      await sidebar({ type: 'groupAction', groupId: main.id, action: 'ungroup' });
+      assert.strictEqual(group(main), undefined);
+      assert.ok(isOpen('a.txt') && isOpen('b.txt'), 'Ungroup keeps the tabs open');
+    });
+
+    test('"Add Tab to New Group" and "Edit Group…" from the side bar open the group settings there', async () => {
+      answerPrompts({ type: 'should not be asked' });
+      api.sidebar.lastEdit = undefined;
+      await run('tabPalette.addToNewGroup', { webviewSection: 'tab', uri: id('c.txt') });
+      const made = api.store.groupOf(id('c.txt'))!;
+      assert.strictEqual(made.name, '');
+      assert.strictEqual(api.sidebar.lastEdit, made.id);
+      api.sidebar.lastEdit = undefined;
+      await run('tabPalette.editGroup', { webviewSection: 'group', groupId: made.id });
+      assert.strictEqual(api.sidebar.lastEdit, made.id);
+    });
+
+    test('the right-click menu commands act on the item that was right-clicked', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
+      await run('tabPalette.removeFromGroup', { webviewSection: 'groupedTab', uri: id('a.txt') });
+      assert.deepStrictEqual(members(main), ['b.txt']);
+      answerPrompts({ type: 'Renamed' });
+      await run('tabPalette.renameGroup', { webviewSection: 'group', groupId: main.id });
+      assert.strictEqual(group(main)?.name, 'Renamed');
+      await run('tabPalette.closeGroup', { webviewSection: 'group', groupId: main.id });
+      assert.strictEqual(group(main)?.closed, true);
+      assert.ok(!isOpen('b.txt'));
+      assert.deepStrictEqual(
+        api.sidebar.state().groups.filter((g) => g.closed).map((g) => g.name),
+        ['Renamed'],
+        'listed under Closed groups',
+      );
+      await sidebar({ type: 'reopen', groupId: main.id });
+      await waitFor('b.txt is open again', () => isOpen('b.txt'));
+      assert.strictEqual(group(main)?.closed, false);
+    });
+  });
+
   suite('connection to the tab bar UI (the patched workbench)', () => {
     type Message = { type: string; [key: string]: unknown };
     type State = { groups: { id: string; name: string; color: string; collapsed: boolean }[]; rows: { tabs: { label: string; group: string | null }[] }[] };
@@ -654,9 +815,9 @@ suite('TabPalette in a real VS Code window', () => {
       assert.deepStrictEqual(members(main), ['a.txt']);
     });
 
-    test('right-click on a selected tab: the tab bar reports the selection, and "Add Selected Tabs" uses all of it', async () => {
+    test('right-click on a selected tab: the selection the tab bar reports is used, and "Add Selected Tabs" uses all of it', async () => {
       await connectAsTabBar();
-      ui!.send(JSON.stringify({ type: 'selection', row: 0, indexes: [1, 3] })); // b.txt and d.txt are selected
+      ui!.send(JSON.stringify({ type: 'tabSelection', rows: [{ row: 0, indexes: [1, 3] }] })); // b.txt and d.txt are selected
       await settle(100);
       await run('tabPalette.addSelectedToNewGroup', fileUri('d.txt'));
       await waitFor('b.txt is grouped', () => !!api.store.groupOf(id('b.txt')));
@@ -664,9 +825,9 @@ suite('TabPalette in a real VS Code window', () => {
       assert.deepStrictEqual(g.uris.map(nameOf), ['b.txt', 'd.txt']);
     });
 
-    test('right-click on a tab outside the reported selection: only that tab is used', async () => {
+    test('right-click on a tab outside the selection: only that tab is used', async () => {
       await connectAsTabBar();
-      ui!.send(JSON.stringify({ type: 'selection', row: 0, indexes: [0, 1] })); // a.txt and b.txt are selected
+      ui!.send(JSON.stringify({ type: 'tabSelection', rows: [{ row: 0, indexes: [0, 1] }] })); // a.txt and b.txt are selected
       await settle(100);
       await run('tabPalette.addSelectedToNewGroup', fileUri('d.txt'));
       await waitFor('d.txt is grouped', () => !!api.store.groupOf(id('d.txt')));
@@ -714,6 +875,29 @@ suite('TabPalette in a real VS Code window', () => {
       const edit = nextMessage(ui!, 'edit');
       await run('tabPalette.editGroup', g.id);
       assert.strictEqual((await edit).groupId, g.id);
+    });
+
+    test('the side bar shows the tabs selected in the tab bar', async () => {
+      await connectAsTabBar();
+      ui!.send(JSON.stringify({ type: 'tabSelection', rows: [{ row: 0, indexes: [1, 3] }] }));
+      await waitFor('the side bar has the selection', () => api.sidebar.state().rows[0].tabs.filter((t) => t.selected).length === 2);
+      const state = api.sidebar.state();
+      assert.strictEqual(state.selectionSync, true);
+      assert.deepStrictEqual(
+        state.rows[0].tabs.filter((t) => t.selected).map((t) => t.label),
+        [tabBar()[1], tabBar()[3]],
+      );
+      ui!.close();
+      await waitFor('the selection is dropped with the tab bar', () => !api.sidebar.state().selectionSync);
+      assert.ok(api.sidebar.state().rows[0].tabs.every((t) => !t.selected));
+    });
+
+    test('a Ctrl+click in the side bar selects the tab in the tab bar', async () => {
+      await connectAsTabBar();
+      const click = nextMessage(ui!, 'click');
+      const name = tabBar()[2];
+      await api.sidebar.handle({ type: 'select', row: 0, index: 2, key: id(name), ctrl: true, meta: false, shift: false });
+      assert.deepStrictEqual(await click, { type: 'click', row: 0, index: 2, label: name, ctrl: true, meta: false, shift: false });
     });
   });
 });

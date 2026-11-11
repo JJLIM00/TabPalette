@@ -20,13 +20,14 @@
   if (window.__tabGroupsPatch) {
     return;
   }
-  // Also read by the UI tests: whether the extension is connected, and the last state it sent.
-  var P = (window.__tabGroupsPatch = { connected: false, state: null });
+  // Also read by the UI tests: whether the extension is connected, the last state it sent, and
+  // how many times the tab bar was redrawn.
+  var P = (window.__tabGroupsPatch = { connected: false, state: null, renders: 0 });
 
   var PREFIX = 'tab-groups-bridge:';
   // Color slots: theme colors tabPalette.color1 … color9 (Chrome's colors by default; users can change them).
   var COLORS = ['color1', 'color2', 'color3', 'color4', 'color5', 'color6', 'color7', 'color8', 'color9'];
-  var SHORTCUT_CLOSE = navigator.platform.indexOf('Mac') === 0 ? '⌥⇧⌘W' : 'Ctrl+Alt+Shift+W';
+  var SHORTCUT_CLOSE = /Macintosh|Mac OS X/.test(navigator.userAgent) ? '⌥⇧⌘W' : 'Ctrl+Alt+Shift+W';
 
   // ---------------------------------------------------------------- connection
 
@@ -71,6 +72,8 @@
       } else if (msg && msg.type === 'edit') {
         pendingEdit = { gid: msg.groupId, tries: 0 };
         schedule();
+      } else if (msg && msg.type === 'click' && typeof msg.row === 'number' && typeof msg.index === 'number') {
+        clickTab(msg);
       }
     };
     sock.onclose = function () {
@@ -141,6 +144,17 @@
     return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
   }
 
+  /**
+   * Theme-dependent values, worked out once per theme: reading computed styles is slow, and
+   * the tab bar redraws often. `themeChanged` drops them.
+   */
+  var theme = { fg: null, generation: 0 };
+  function themeChanged() {
+    theme.fg = null;
+    theme.generation++;
+    schedule();
+  }
+
   /** Dark or white chip text, whichever reads better on the resolved group color. */
   function chipForegrounds() {
     var root = document.querySelector('.monaco-workbench') || document.body;
@@ -204,11 +218,12 @@
   // ---------------------------------------------------------------- rendering
 
   function render() {
+    P.renders++;
     var groups = {};
     (state ? state.groups : []).forEach(function (g) {
       groups[g.id] = g;
     });
-    var fg = chipForegrounds();
+    var fg = theme.fg || (theme.fg = chipForegrounds());
     var usedRows = {};
     var rows = domRows();
     for (var c = 0; c < rows.length; c++) {
@@ -315,8 +330,17 @@
     toggle(chip, 'tg-unnamed', !name);
     setVar(chip, '--tg-chip-fg', fg[g.color]);
     chip.title = (name || 'Unnamed group') + (g.collapsed ? ' (collapsed)' : '') + ' (click to ' + (g.collapsed ? 'expand' : 'collapse') + ', drag to move, right-click to edit)';
-    var width = chip.offsetWidth + 'px';
-    setVar(tab, '--tg-chip-w', width);
+    // Measuring forces a layout, so a chip is measured again only when its text or the theme
+    // changed. A chip that is not on screen measures 0: try again on the next redraw.
+    var measured = name + '|' + theme.generation;
+    if (chip.dataset.tgMeasured !== measured) {
+      var width = chip.offsetWidth;
+      if (width > 0) {
+        chip.dataset.tgMeasured = measured;
+        chip.dataset.tgWidth = String(width);
+      }
+    }
+    setVar(tab, '--tg-chip-w', (chip.dataset.tgWidth || chip.offsetWidth) + 'px');
   }
 
   // ---------------------------------------------------------------- chip events
@@ -469,7 +493,6 @@
     function (e) {
       var chip = e.target && e.target.closest ? e.target.closest('.tg-chip') : null;
       if (!chip) {
-        reportSelection(e);
         return;
       }
       e.preventDefault();
@@ -513,18 +536,50 @@
     });
   }
 
-  /** Right-click on a tab: tell the extension which tabs a "selected tabs" command applies to. */
-  function reportSelection(e) {
-    var tab = e.target && e.target.closest ? e.target.closest('.tabs-container > .tab') : null;
-    var container = tab ? tab.parentElement : null;
-    if (!tab || !container || container.dataset.tgRow === undefined || !ws || ws.readyState !== 1) {
+  /**
+   * Reports the selected tabs of every tab row (VS Code also marks the active tab `selected`)
+   * whenever they change: the side bar shows the same selection, and "selected tabs" commands
+   * from a tab's right-click menu act on it.
+   */
+  var lastSelection = '';
+  function reportTabSelection() {
+    if (!ws || ws.readyState !== 1) {
+      lastSelection = '';
       return;
     }
-    var all = rowTabs(container);
-    var indexes = selectedWith(tab).map(function (t) {
-      return all.indexOf(t);
+    var rows = [];
+    domRows().forEach(function (row) {
+      var at = row.containers[0].dataset.tgRow;
+      if (at === undefined) {
+        return;
+      }
+      var indexes = [];
+      row.tabs.forEach(function (t, i) {
+        if (t.classList.contains('selected')) {
+          indexes.push(i);
+        }
+      });
+      rows.push({ row: +at, indexes: indexes });
     });
-    ws.send(JSON.stringify({ type: 'selection', row: +container.dataset.tgRow, indexes: indexes }));
+    var sig = JSON.stringify(rows);
+    if (sig !== lastSelection) {
+      lastSelection = sig;
+      ws.send(JSON.stringify({ type: 'tabSelection', rows: rows }));
+    }
+  }
+
+  /** A Ctrl/Shift+click in the side bar: click the same tab here, so VS Code selects it the same way. */
+  function clickTab(msg) {
+    var container = document.querySelector('.tabs-container[data-tg-row="' + msg.row + '"]');
+    var tab = container ? rowTabs(container)[msg.index] : null;
+    if (!tab || labelOf(tab) !== msg.label) {
+      return;
+    }
+    var opts = { bubbles: true, cancelable: true, button: 0, view: window, ctrlKey: !!msg.ctrl, metaKey: !!msg.meta, shiftKey: !!msg.shift };
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function (type) {
+      var Ev = type.indexOf('pointer') === 0 && window.PointerEvent ? PointerEvent : MouseEvent;
+      tab.dispatchEvent(new Ev(type, opts));
+    });
   }
 
   // ---------------------------------------------------------------- dragging a tab onto / off a group (Chrome)
@@ -930,6 +985,7 @@
       pending = false;
       try {
         render();
+        reportTabSelection();
       } catch (err) {
         console.error('[TabPalette]', err);
       }
@@ -955,22 +1011,51 @@
       .join(' ');
   }
 
+  /** Inside a tab bar (with its editor actions; pinned tabs on a row of their own have a second one). */
+  function inTabBar(node) {
+    var e = node && (node.nodeType === 1 ? node : node.parentElement);
+    return !!e && !!e.closest('.tabs-and-actions-container');
+  }
+
+  /** An editor group (with its tab bar) was added or removed, e.g. by splitting the editor. */
+  function holdsTabBar(nodes) {
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (n.nodeType === 1 && (n.classList.contains('tabs-and-actions-container') || n.querySelector('.tabs-and-actions-container'))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Whether a DOM change can change what we draw. Only the tab bars count: everything else in
+   * the window (typing in the editor, the cursor blinking, the panels) is ignored, so the tab bar
+   * is not redrawn for nothing.
+   */
   function relevant(m) {
+    if (ours(m.target)) {
+      return false;
+    }
     if (m.type === 'attributes') {
-      if (ours(m.target)) {
+      if (m.target === document.body || m.target.classList.contains('monaco-workbench')) {
+        // Theme type (dark, light, high contrast) is a class here.
+        if (stripOurs(m.oldValue) !== stripOurs(m.target.getAttribute('class'))) {
+          themeChanged();
+        }
         return false;
       }
       // Ignore our own tg-* class toggles on tabs.
-      return stripOurs(m.oldValue) !== stripOurs(m.target.getAttribute('class'));
+      return inTabBar(m.target) && stripOurs(m.oldValue) !== stripOurs(m.target.getAttribute('class'));
     }
     if (m.type === 'childList') {
-      if (ours(m.target)) {
-        return false;
+      if (!inTabBar(m.target)) {
+        return holdsTabBar(m.addedNodes) || holdsTabBar(m.removedNodes);
       }
       var all = Array.prototype.slice.call(m.addedNodes).concat(Array.prototype.slice.call(m.removedNodes));
       return all.length === 0 || !all.every(ours);
     }
-    return true;
+    return inTabBar(m.target); // characterData: a tab's name changed
   }
 
   function start() {
@@ -998,6 +1083,8 @@
       attributeFilter: ['class', 'aria-label'],
       attributeOldValue: true,
     });
+    // The theme's colors (and `workbench.colorCustomizations`) are a style sheet in <head>.
+    new MutationObserver(themeChanged).observe(document.head, { subtree: true, childList: true, characterData: true });
     window.addEventListener('resize', schedule);
     connect();
     schedule();

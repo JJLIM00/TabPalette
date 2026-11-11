@@ -173,11 +173,12 @@ export class Layout {
       return;
     }
     const member = (u: string) => this.store.groupOf(u)?.id === groupId;
-    const target = groupInsertIndex(order(row), member, beforeIndex);
+    const keys = order(row);
+    const target = groupInsertIndex(keys, member, beforeIndex);
     if (target === undefined) {
       return;
     }
-    await this.reorder(row.viewColumn, member, target);
+    await this.moveTabsTogether(rowIndex, keys.filter(member), target);
   }
 
   /**
@@ -204,31 +205,86 @@ export class Layout {
     });
   }
 
-  /** Moves the member tabs of a row, in order, so the first one ends up at `target` among the other tabs. */
-  private async reorder(viewColumn: vscode.ViewColumn, member: (u: string) => boolean, othersBefore: number): Promise<void> {
+  /**
+   * Makes `tab` the active tab of its row, without pinning a preview tab. File tabs open
+   * through `vscode.open`; other tabs (settings, diffs…) are opened by their position.
+   */
+  async showTab(row: vscode.TabGroup, tab: vscode.Tab, preserveFocus = false): Promise<void> {
+    const input = tab.input;
+    if (input instanceof vscode.TabInputText || input instanceof vscode.TabInputCustom || input instanceof vscode.TabInputNotebook) {
+      await vscode.commands.executeCommand('vscode.open', input.uri, { viewColumn: row.viewColumn, preview: tab.isPreview, preserveFocus });
+      return;
+    }
+    // Focus the row through a file tab of it, then pick the tab by position.
+    const anchor = row.tabs.find((t) => t.input instanceof vscode.TabInputText);
+    if (anchor) {
+      await vscode.commands.executeCommand('vscode.open', (anchor.input as vscode.TabInputText).uri, {
+        viewColumn: row.viewColumn,
+        preview: anchor.isPreview,
+      });
+    } else {
+      const index = vscode.window.tabGroups.all.indexOf(row);
+      const focus = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth'][index];
+      if (focus) {
+        await vscode.commands.executeCommand(`workbench.action.focus${focus}EditorGroup`);
+      }
+    }
+    await vscode.commands.executeCommand('workbench.action.openEditorAtIndex', row.tabs.indexOf(tab));
+  }
+
+  /** Moves the tab at `from` in tab row `rowIndex` to index `to`, keeping the active tab. */
+  async moveTab(rowIndex: number, from: number, to: number): Promise<void> {
+    const row = vscode.window.tabGroups.all[rowIndex];
+    const tab = row?.tabs[from];
+    if (!row || !tab || from === to) {
+      return;
+    }
     const before = activeLocation();
-    const rowOf = () => vscode.window.tabGroups.all.find((g) => g.viewColumn === viewColumn);
+    const wasActive = row.activeTab === tab && row === vscode.window.tabGroups.activeTabGroup;
     await this.tracker.suspend(async () => {
-      const start = rowOf();
-      if (!start) {
-        return;
+      await this.showTab(row, tab);
+      await vscode.commands.executeCommand('moveActiveEditor', { to: 'position', by: 'tab', value: to + 1 });
+      if (before && !wasActive) {
+        await vscode.commands.executeCommand('vscode.open', before.uri, { viewColumn: before.viewColumn, preview: false });
       }
-      const members = order(start).filter(member);
-      const open = (u: string) =>
-        vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(u), { viewColumn, preview: false });
-      const moveTo = (position: number) =>
-        vscode.commands.executeCommand('moveActiveEditor', { to: 'position', by: 'tab', value: position + 1 });
-      // 1) Send the members to the end, keeping their order.
-      for (const u of members) {
-        await open(u);
-        await moveTo(order(rowOf()!).length - 1);
+    });
+  }
+
+  /**
+   * Moves the tabs `keys` (in this order) of tab row `rowIndex` so they sit together after
+   * `othersBefore` of the other tabs. Works for any tab, not only files.
+   */
+  async moveTabsTogether(rowIndex: number, keys: readonly string[], othersBefore: number): Promise<void> {
+    const start = vscode.window.tabGroups.all[rowIndex];
+    if (!start || keys.length === 0) {
+      return;
+    }
+    const viewColumn = start.viewColumn;
+    const rowOf = () => vscode.window.tabGroups.all.find((g) => g.viewColumn === viewColumn);
+    const before = activeLocation();
+    const show = async (key: string) => {
+      const row = rowOf();
+      const index = row ? order(row).indexOf(key) : -1;
+      if (row && index >= 0) {
+        await this.showTab(row, row.tabs[index]);
+        return true;
       }
-      // 2) Bring them back in front of the target tab, one by one.
-      const total = order(rowOf()!).length;
-      if (othersBefore < total - members.length) {
-        for (const [j, u] of members.entries()) {
-          await open(u);
-          await moveTo(othersBefore + j);
+      return false;
+    };
+    const moveTo = (position: number) => vscode.commands.executeCommand('moveActiveEditor', { to: 'position', by: 'tab', value: position + 1 });
+    await this.tracker.suspend(async () => {
+      // Send them to the end, in order; then bring them back to their spot, one by one.
+      for (const key of keys) {
+        if (await show(key)) {
+          await moveTo(order(rowOf()!).length - 1);
+        }
+      }
+      const total = rowOf() ? order(rowOf()!).length : 0;
+      if (othersBefore < total - keys.length) {
+        for (const [j, key] of keys.entries()) {
+          if (await show(key)) {
+            await moveTo(othersBefore + j);
+          }
         }
       }
       if (before) {
@@ -237,29 +293,48 @@ export class Layout {
     });
   }
 
-  /** Chrome collapse: hide the group's tabs; if one is active, switch to a tab outside the group. */
+  /**
+   * Chrome collapse: hide the group's tabs. If one is active, switch to the nearest tab that stays
+   * visible (not in this or another collapsed group); if there is none, open a new empty file
+   * outside any group, as Chrome opens a new tab.
+   */
   async collapse(groupId: string): Promise<void> {
-    const member = (u: string) => this.store.groupOf(u)?.id === groupId;
+    const hidden = (u: string) => {
+      const g = this.store.groupOf(u);
+      return !!g && (g.id === groupId || g.collapsed);
+    };
+    const created: string[] = [];
     await this.tracker.suspend(async () => {
       for (const row of vscode.window.tabGroups.all) {
         const active = row.activeTab ? tabUri(row.activeTab)?.toString() : undefined;
-        if (!active || !member(active)) {
+        if (!active || !hidden(active)) {
           continue;
         }
         const tabs = order(row);
         const at = tabs.indexOf(active);
-        const pick =
-          tabs.slice(at + 1).find((u) => !member(u) && !u.startsWith('#')) ??
-          [...tabs.slice(0, at)].reverse().find((u) => !member(u) && !u.startsWith('#'));
-        if (pick) {
-          await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(pick), {
-            viewColumn: row.viewColumn,
-            preview: false,
-            preserveFocus: row !== vscode.window.tabGroups.activeTabGroup,
-          });
+        // The tabs to the right first, then those to the left, nearest first.
+        const indexes = [...tabs.keys()];
+        const near = [...indexes.slice(at + 1), ...indexes.slice(0, at).reverse()];
+        const pick = near.find((i) => !hidden(tabs[i]));
+        const preserveFocus = row !== vscode.window.tabGroups.activeTabGroup;
+        if (pick !== undefined) {
+          await this.showTab(row, row.tabs[pick], preserveFocus);
+        } else {
+          const doc = await vscode.workspace.openTextDocument({ content: '' });
+          await vscode.window.showTextDocument(doc, { viewColumn: row.viewColumn, preview: false, preserveFocus });
+          created.push(doc.uri.toString());
+          // At the end of the row, like Chrome's new tab, so it never splits a group.
+          const rowIndex = vscode.window.tabGroups.all.findIndex((r) => r.viewColumn === row.viewColumn);
+          const now = vscode.window.tabGroups.all[rowIndex];
+          const from = now ? order(now).indexOf(doc.uri.toString()) : -1;
+          if (from >= 0) {
+            await this.moveTab(rowIndex, from, now.tabs.length - 1);
+          }
         }
       }
     });
+    // The new file may have opened between two tabs of the group: it is never in a group.
+    this.store.removeUris(created);
     this.store.setCollapsed(groupId, true);
   }
 

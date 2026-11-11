@@ -102,10 +102,10 @@ export class MembershipTracker implements vscode.Disposable {
 
   private onTabs(e: vscode.TabChangeEvent): void {
     // Closed tabs leave their group (Chrome), unless we closed them (Close group, Delete group).
-    const stillOpen = new Set(vscode.window.tabGroups.all.flatMap((g) => order(g)));
+    const stillOpen = e.closed.length > 0 ? new Set(vscode.window.tabGroups.all.flatMap((g) => order(g))) : undefined;
     const closed = e.closed
       .map((t) => tabUri(t)?.toString())
-      .filter((u): u is string => !!u && !stillOpen.has(u) && !this.guard.consume(u) && !!this.store.groupOf(u));
+      .filter((u): u is string => !!u && !stillOpen!.has(u) && !this.guard.consume(u) && !!this.store.groupOf(u));
     if (closed.length > 0) {
       this.store.removeUris(closed);
       this.store.pruneEmpty();

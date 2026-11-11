@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- New **Tab Groups side bar** (Activity Bar icon): all open tabs listed top to bottom like Chrome's vertical tabs, each group under a header in its color. Click to open or close tabs and to collapse groups; drag tabs into and out of groups and drag headers to move groups; Ctrl/Shift+click to select several tabs (the same selection as the tab bar), then drag, right-click or press Delete to act on all of them; right-click a header, or hover it and click ⋮ (or press F2), for the group settings, as in Chrome: name, color, New tab in group, Move group to new window, Close group, Ungroup, Delete group; reopen closed groups from the list.
+- Fixed: collapsing a group when every other tab is hidden in a collapsed group kept showing a hidden tab. Collapsing now switches only to a tab that stays visible, and when there is none it opens a new empty file outside any group at the end of the tab bar, like Chrome's new tab.
+- Fixed: "Add Tab to New Group" from the side bar's right-click menu opened the new group's settings on the tab bar. They now open in the side bar, where the menu was used.
+- Faster: the tab bar is only redrawn when a tab bar changes, not on every key typed in the editor or every blink of the cursor (from about 26 redraws to 2 while typing a few words). Unchanged state is no longer sent to the tab bar or the side bar again, and finding a file's group no longer searches every group.
+
 ## 0.1.3
 
 - Fixed: after an update, the tab bar could keep running the old script even after reloading the window. Each version of the script now has a file name of its own, so VS Code always loads the current one.
