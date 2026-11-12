@@ -349,10 +349,11 @@ suite('TabPalette in a real VS Code window', () => {
         'grouped in the new window',
       );
       assert.deepStrictEqual(tabBarOf(vscode.window.tabGroups.all[0]), ['d.txt'], 'only d.txt is left in the first window');
-      await run('workbench.action.closeAllEditors'); // closes the new window too
-      for (const r of vscode.window.tabGroups.all.filter((r) => !rowsBefore.has(r))) {
-        await vscode.window.tabGroups.close(r);
-      }
+      // Back into the main window: VS Code closes the new window (on macOS an emptied window
+      // stays open and keeps the focus, so closing its tabs is not enough).
+      await run('vscode.open', fileUri('a.txt'), { viewColumn: row.viewColumn, preview: false }); // focus the new window
+      await run('workbench.action.restoreEditorsToMainWindow');
+      await waitFor('the new window is closed', () => vscode.window.tabGroups.all.every((r) => rowsBefore.has(r)), 5000);
     });
 
     test('a tab added to a group from another editor group moves to the group', async () => {
