@@ -117,9 +117,22 @@ body {
   -webkit-mask: var(--icon-file) center / 16px no-repeat;
 }
 
-.icon.pinned {
-  mask-image: var(--icon-pin);
-  -webkit-mask-image: var(--icon-pin);
+/* The file icon theme's icon: a picture, or a character of the theme's icon font. */
+.icon.themed {
+  background: center / 16px no-repeat;
+  opacity: 1;
+  mask: none;
+  -webkit-mask: none;
+}
+
+.icon.glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  font-size: 150%;
+  line-height: 16px;
+  -webkit-font-smoothing: antialiased;
 }
 
 .label {
@@ -173,6 +186,16 @@ body {
 .tab:focus-within .close,
 .tab.dirty .close {
   visibility: visible;
+}
+
+/* Pinned: a pin instead of the ×, until hovered (like VS Code's tabs). */
+.tab.pinned .close {
+  visibility: visible;
+}
+
+.tab.pinned:not(:hover) .close::before {
+  mask-image: var(--icon-pin);
+  -webkit-mask-image: var(--icon-pin);
 }
 
 /* Unsaved: a dot instead of the ×, until hovered (like VS Code's tabs). */

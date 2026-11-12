@@ -145,7 +145,10 @@ export class VSCodeWindow {
    */
   async focus(): Promise<void> {
     await this.app.evaluate(({ BrowserWindow }) => {
-      const w = BrowserWindow.getAllWindows()[0];
+      // The first window opened (a window closed by a test can still be listed for a moment).
+      type Win = { id: number; isDestroyed(): boolean; show(): void; focus(): void };
+      const all: Win[] = BrowserWindow.getAllWindows();
+      const w = all.filter((b) => !b.isDestroyed()).sort((x, y) => x.id - y.id)[0];
       w.show();
       w.focus();
     });
@@ -280,6 +283,21 @@ export class VSCodeWindow {
 
   async chip(name: string): Promise<ChipView | undefined> {
     return (await this.chips()).find((c) => c.name === name);
+  }
+
+  /** Runs `action` and returns the VS Code window it opens (e.g. "Move group to new window"). */
+  async newWindowFrom(action: () => Promise<void>): Promise<Page> {
+    const opened = this.app.waitForEvent('window', { timeout: 10_000 });
+    await action();
+    return opened;
+  }
+
+  /** In another VS Code window: its tabs (names) and group chips (names), as drawn. */
+  static tabBarOf(page: Page): Promise<{ tabs: string[]; chips: string[] }> {
+    return page.evaluate(() => ({
+      tabs: [...document.querySelectorAll('.tabs-container > .tab .label-name')].map((e) => e.textContent ?? ''),
+      chips: [...document.querySelectorAll('.tg-chip')].map((e) => e.textContent ?? ''),
+    }));
   }
 
   /** Whether the group editor bubble is open. */
@@ -708,10 +726,49 @@ export class VSCodeWindow {
     await this.chooseContextMenuItem(item);
   }
 
+  /**
+   * Right-clicks a tab in the side bar and reads the menu that opens: its items in order, '---'
+   * between sections, and '(off)' after a disabled item. The menu is closed again.
+   */
+  async sidebarTabMenuItems(name: string): Promise<string[]> {
+    const frame = await this.sidebar();
+    await frame.locator('.tab', { has: frame.locator('.label', { hasText: new RegExp(`^${escapeRegExp(name)}$`) }) }).click({ button: 'right' });
+    const menu = this.page.locator('.context-view .monaco-menu');
+    await menu.waitFor({ state: 'visible', timeout: 5000 });
+    const items = await menu.locator('.action-item').evaluateAll((all) =>
+      all.map((li) =>
+        li.querySelector('.action-label.separator') || li.classList.contains('separator')
+          ? '---'
+          : (li.querySelector('.action-label')?.textContent ?? '').trim() + (li.classList.contains('disabled') ? ' (off)' : ''),
+      ),
+    );
+    await this.page.keyboard.press('Escape');
+    await menu.waitFor({ state: 'detached', timeout: 5000 });
+    return items;
+  }
+
   /** Names of the tabs selected (Ctrl/Shift+click) in the side bar. */
   async sidebarSelection(): Promise<string[]> {
     const frame = await this.sidebar();
     return frame.locator('.tab.selected .label').allTextContents();
+  }
+
+  /** The file icon of a tab in the tab bar: the icon font character VS Code draws before its name. */
+  async tabBarIcon(name: string): Promise<string> {
+    return this.tabLocator(name).locator('.monaco-icon-label').first().evaluate((el) => getComputedStyle(el, '::before').content.replace(/^"|"$/g, ''));
+  }
+
+  /** The file icon of a tab in the side bar: its font character and whether that font has loaded. */
+  async sidebarIcon(name: string): Promise<{ char: string; fontLoaded: boolean }> {
+    const frame = await this.sidebar();
+    return frame
+      .locator('.tab', { has: frame.locator('.label', { hasText: new RegExp(`^${escapeRegExp(name)}$`) }) })
+      .locator('.icon')
+      .evaluate(async (el) => {
+        await document.fonts.ready;
+        const family = (el as HTMLElement).style.fontFamily;
+        return { char: el.textContent ?? '', fontLoaded: !!family && document.fonts.check('16px ' + family, el.textContent ?? '') };
+      });
   }
 
   /** Clicks a group header in the side bar. */

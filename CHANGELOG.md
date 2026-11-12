@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+- The side bar's tab menu now has the same items as the Explorer's Open Editors list, below the Tab Groups items: Open to the Side, Reveal in File Explorer, Copy Path, Copy Relative Path, Reopen Editor With..., Save, Revert File, Compare with Saved, Select for Compare / Compare with Selected, Close, Close Others, Close Saved and Close All. Save, Revert File and Compare with Saved are greyed out for saved tabs, as in VS Code.
+- Fixed: the side bar showed the same plain file icon for every tab. It now shows the icons of your file icon theme, the same as the Explorer and the tab bar (by file name, extension or language, so an untitled file set to JSON gets the JSON icon). Pinned tabs show a pin where the close button is.
+- Fixed: dragging a grouped tab out of its group on the tab bar took about half a second to ungroup it. It now leaves the group as soon as you drop it.
+- Fixed: a grouped tab dragged to another editor group, or opened to the side, still showed as grouped there. Like a Chrome group lives in one window, a group now lives in one editor group: a tab dragged to another editor group leaves its group (a group's only tab takes the group along), and the copy opened to the side is not grouped. Adding a tab from another editor group to a group moves it to the group.
+- Fixed: "Add Tab to Group…" on several files selected in the Explorer only grouped the file that was already open. Files without a tab are now opened and all of them join the group (folders are skipped).
+- Fixed: "Move group to new window" moved only one of the group's tabs, and the new window's tab bar showed no group. Every tab of the group now moves, and the new window's tab bar shows the group too.
+
 ## 0.2.0
 
 - New **Tab Groups side bar** (Activity Bar icon): all open tabs listed top to bottom like Chrome's vertical tabs, each group under a header in its color. Click to open or close tabs and to collapse groups; drag tabs into and out of groups and drag headers to move groups; Ctrl/Shift+click to select several tabs (the same selection as the tab bar), then drag, right-click or press Delete to act on all of them; right-click a header, or hover it and click ⋮ (or press F2), for the group settings, as in Chrome: name, color, New tab in group, Move group to new window, Close group, Ungroup, Delete group; reopen closed groups from the list.

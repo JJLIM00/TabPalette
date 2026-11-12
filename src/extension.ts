@@ -8,6 +8,7 @@ import { registerPatchCommands } from './patchCommands';
 import { GroupStore } from './store';
 import { registerFileSync } from './fileSync';
 import { SIDEBAR_VIEW_ID, SidebarProvider } from './sidebar';
+import { registerSidebarTabCommands } from './sidebarTabCommands';
 import { CloseGuard } from './tabs';
 
 /** Returned from activate() so the integration tests can reach the extension's state. */
@@ -31,7 +32,7 @@ export function activate(context: vscode.ExtensionContext): TabGroupsApi {
   const sidebar = new SidebarProvider(context.extensionUri, store, layout, handleUiAction, () => bridge);
   const startBridge = async () => {
     if (!bridge) {
-      bridge = new Bridge(store, handleUiAction);
+      bridge = new Bridge(store, handleUiAction, undefined, (row, uri) => tracker.groupIn(row, uri));
       // The side bar shows the tab bar's selection.
       bridge.onDidChangeSelection(() => sidebar.refresh());
       await bridge.start();
@@ -46,6 +47,7 @@ export function activate(context: vscode.ExtensionContext): TabGroupsApi {
 
   context.subscriptions.push(store, tracker, registerFileSync(store), registerContextKeys(store), { dispose: stopBridge });
   context.subscriptions.push(sidebar, vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, sidebar));
+  registerSidebarTabCommands(context, layout);
 
   registerPatchCommands(context, {
     onEnabled: async () => {

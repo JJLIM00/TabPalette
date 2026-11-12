@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { Bridge, UiAction } from './bridge';
+import { FileIcon, FileIconTheme, IconFont } from './iconTheme';
 import { Layout } from './layout';
 import { order } from './membership';
 import { GroupColor } from './model';
@@ -20,6 +21,8 @@ export interface SidebarState {
    * Ctrl/Shift+click in the side bar selects through the tab bar, so both always agree.
    */
   selectionSync: boolean;
+  /** Fonts of the file icon theme, for icons drawn as font characters. */
+  fonts: IconFont[];
 }
 
 export interface SidebarRow {
@@ -44,6 +47,8 @@ export interface SidebarTab {
   /** Selected in the tab bar (Ctrl/Shift+click); the active tab counts as selected. */
   selected: boolean;
   groupId?: string;
+  /** The file icon theme's icon; none for tabs that aren't files, or with no icon theme. */
+  icon?: FileIcon;
 }
 
 export interface SidebarGroup {
@@ -91,18 +96,26 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     private readonly groupAction: (action: UiAction) => Promise<void>,
     /** The connection to the tab bar, while the patch is on. */
     private readonly bridge: () => Bridge | undefined = () => undefined,
+    private readonly icons: FileIconTheme = new FileIconTheme(),
   ) {
     this.subscriptions = [
+      icons,
+      icons.onDidChange(() => {
+        this.allowIcons();
+        this.refresh();
+      }),
       store.onDidChange(() => this.refresh()),
       vscode.window.tabGroups.onDidChangeTabs(() => this.refresh()),
       vscode.window.tabGroups.onDidChangeTabGroups(() => this.refresh()),
+      // A file's language picks its icon, and changing the language reopens the document.
+      vscode.workspace.onDidOpenTextDocument(() => this.refresh()),
     ];
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
     const media = vscode.Uri.joinPath(this.extensionUri, 'resources', 'sidebar');
-    view.webview.options = { enableScripts: true, localResourceRoots: [media] };
+    this.allowIcons();
     view.webview.html = this.html(view.webview, media);
     view.webview.onDidReceiveMessage((m) => void this.handle(m));
     view.onDidChangeVisibility(() => this.refresh());
@@ -111,16 +124,27 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     });
   }
 
+  /** Lets the page load the side bar's files and the file icon themes' icons and fonts. */
+  private allowIcons(): void {
+    if (this.view) {
+      const media = vscode.Uri.joinPath(this.extensionUri, 'resources', 'sidebar');
+      this.view.webview.options = { enableScripts: true, localResourceRoots: [media, ...FileIconTheme.resourceRoots()] };
+    }
+  }
+
   /** The current state of the tabs and groups, as the page draws it. */
   state(): SidebarState {
     const all = vscode.window.tabGroups.all;
-    const groupOf = (key: string) => this.store.groupOf(key)?.id;
     const bridge = this.bridge();
     const selectionSync = !!bridge && bridge.connections > 0;
     const activeRow = vscode.window.tabGroups.activeTabGroup;
+    const webview = this.view?.webview;
+    // The language picks the icon of files with no known name or extension (like Untitled-1).
+    const languages = new Map(vscode.workspace.textDocuments.map((d) => [d.uri.toString(), d.languageId]));
     const rows = all.map((row, index) => {
       const selected = new Set(selectionSync ? bridge!.selectedIndexes(index) : []);
       const keys = order(row);
+      const groupOf = (key: string) => this.layout.groupIn(row, key)?.id;
       // Tabs with the same name show their folder too.
       const named = new Map<string, number>();
       for (const tab of row.tabs) {
@@ -144,6 +168,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
             preview: tab.isPreview,
             selected: selected.has(i),
             groupId: uri ? groupOf(key) : undefined,
+            icon: uri && webview ? this.icons.iconFor(uri, languages.get(key), webview) : undefined,
           };
         }),
       };
@@ -156,7 +181,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
       closed: g.closed,
       count: g.uris.length,
     }));
-    return { rows, groups, selectionSync };
+    return { rows, groups, selectionSync, fonts: webview ? this.icons.fonts(webview) : [] };
   }
 
   /** Handles a message from the page (public for the integration tests). */
@@ -239,7 +264,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         if (!g || !target || !row) {
           return;
         }
-        const before = groupDropIndex(order(row), target, (k) => this.store.groupOf(k)?.id);
+        const before = groupDropIndex(order(row), target, (k) => this.layout.groupIn(row, k)?.id);
         return before === undefined ? undefined : this.layout.moveGroupTo(g.id, m.row as number, before);
       }
     }
@@ -254,7 +279,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     const row = vscode.window.tabGroups.all[rowIndex];
     const keys = order(row);
     const key = keys[from];
-    const groupOf = (k: string) => this.store.groupOf(k)?.id;
+    const groupOf = (k: string) => this.layout.groupIn(row, k)?.id;
     const plan = planTabDrop(keys, from, target, groupOf);
     if (!plan) {
       return;
@@ -281,7 +306,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     }
     const row = vscode.window.tabGroups.all[rowIndex];
     const keys = order(row);
-    const groupOf = (k: string) => this.store.groupOf(k)?.id;
+    const groupOf = (k: string) => this.layout.groupIn(row, k)?.id;
     const plan = planTabsDrop(keys, from, target, groupOf);
     if (!plan) {
       return;
@@ -365,7 +390,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; img-src ${webview.cspSource} data:; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="${css}">
 <title>Tab Groups</title>

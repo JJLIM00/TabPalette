@@ -97,8 +97,8 @@ suite('Group layout rules', () => {
       assert.strictEqual(leaving('a G1 b', 'G1'), '');
     });
 
-    test('a tab that ended up between two of its group mates stays in the group', () => {
-      assert.strictEqual(leaving('G1 G2 G3', 'G2'), '');
+    test('a tab still between its group mates leaves too (the report can come before the move)', () => {
+      assert.strictEqual(leaving('G1 G2 G3', 'G2'), 'G2');
     });
 
     test('several selected tabs dragged out together all leave the group', () => {

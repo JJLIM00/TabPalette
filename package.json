@@ -2,7 +2,7 @@
   "name": "tabpalette",
   "displayName": "TabPalette - Tab Groups",
   "description": "Chrome-style tab groups on the VS Code tab bar: named, colored groups you can collapse, drag tabs into, and reorder.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "JJLIM00",
   "license": "MIT",
   "repository": {
@@ -144,6 +144,89 @@
         "command": "tabPalette.reloadPatch",
         "title": "Reload Tab Bar Script",
         "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.openToSide",
+        "title": "Open to the Side",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.revealInExplorer",
+        "title": "Reveal in File Explorer",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.revealInFinder",
+        "title": "Reveal in Finder",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.openContainingFolder",
+        "title": "Open Containing Folder",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.copyPath",
+        "title": "Copy Path",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.copyRelativePath",
+        "title": "Copy Relative Path",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.reopenWith",
+        "title": "Reopen Editor With...",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.save",
+        "title": "Save",
+        "category": "Tab Groups",
+        "enablement": "tabDirty"
+      },
+      {
+        "command": "tabPalette.tab.revert",
+        "title": "Revert File",
+        "category": "Tab Groups",
+        "enablement": "tabDirty"
+      },
+      {
+        "command": "tabPalette.tab.compareWithSaved",
+        "title": "Compare with Saved",
+        "category": "Tab Groups",
+        "enablement": "tabDirty"
+      },
+      {
+        "command": "tabPalette.tab.compareWithSelected",
+        "title": "Compare with Selected",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.selectForCompare",
+        "title": "Select for Compare",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.close",
+        "title": "Close",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.closeOthers",
+        "title": "Close Others",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.closeSaved",
+        "title": "Close Saved",
+        "category": "Tab Groups"
+      },
+      {
+        "command": "tabPalette.tab.closeAll",
+        "title": "Close All",
+        "category": "Tab Groups"
       }
     ],
     "menus": {
@@ -228,43 +311,187 @@
         {
           "command": "tabPalette.moveToGroup",
           "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.openToSide",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.revealInExplorer",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.revealInFinder",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.openContainingFolder",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.copyRelativePath",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.reopenWith",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.save",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.revert",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.compareWithSaved",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.compareWithSelected",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.selectForCompare",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.close",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.closeOthers",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.closeSaved",
+          "when": "false"
+        },
+        {
+          "command": "tabPalette.tab.closeAll",
+          "when": "false"
         }
       ],
       "webview/context": [
         {
           "command": "tabPalette.addToGroup",
-          "group": "1_tabpalette@1",
+          "group": "1_tabgroups@1",
           "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'tab'"
         },
         {
           "command": "tabPalette.addToNewGroup",
-          "group": "1_tabpalette@2",
+          "group": "1_tabgroups@2",
           "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'tab'"
         },
         {
           "command": "tabPalette.moveToGroup",
-          "group": "1_tabpalette@1",
+          "group": "1_tabgroups@1",
           "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'groupedTab'"
         },
         {
           "command": "tabPalette.removeFromGroup",
-          "group": "1_tabpalette@2",
+          "group": "1_tabgroups@2",
           "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'groupedTab'"
         },
         {
           "command": "tabPalette.addSelectedToGroup",
-          "group": "1_tabpalette@1",
+          "group": "1_tabgroups@1",
           "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'selectedTabs'"
         },
         {
           "command": "tabPalette.addSelectedToNewGroup",
-          "group": "1_tabpalette@2",
+          "group": "1_tabgroups@2",
           "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'selectedTabs'"
         },
         {
           "command": "tabPalette.removeSelectedFromGroup",
-          "group": "1_tabpalette@3",
+          "group": "1_tabgroups@3",
           "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'selectedTabs'"
+        },
+        {
+          "command": "tabPalette.tab.openToSide",
+          "group": "2_open@1",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+        },
+        {
+          "command": "tabPalette.tab.revealInExplorer",
+          "group": "2_open@2",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme == 'file' && isWindows"
+        },
+        {
+          "command": "tabPalette.tab.revealInFinder",
+          "group": "2_open@2",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme == 'file' && isMac"
+        },
+        {
+          "command": "tabPalette.tab.openContainingFolder",
+          "group": "2_open@2",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme == 'file' && isLinux"
+        },
+        {
+          "command": "tabPalette.tab.copyPath",
+          "group": "3_copy@1",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+        },
+        {
+          "command": "tabPalette.tab.copyRelativePath",
+          "group": "3_copy@2",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+        },
+        {
+          "command": "tabPalette.tab.reopenWith",
+          "group": "4_reopen@1",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+        },
+        {
+          "command": "tabPalette.tab.save",
+          "group": "5_save@1",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+        },
+        {
+          "command": "tabPalette.tab.revert",
+          "group": "5_save@2",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+        },
+        {
+          "command": "tabPalette.tab.compareWithSaved",
+          "group": "6_compare@1",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+        },
+        {
+          "command": "tabPalette.tab.compareWithSelected",
+          "group": "6_compare@2",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && resourceSelectedForCompare"
+        },
+        {
+          "command": "tabPalette.tab.selectForCompare",
+          "group": "6_compare@3",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+        },
+        {
+          "command": "tabPalette.tab.close",
+          "group": "7_close@1",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab|otherTab)$/"
+        },
+        {
+          "command": "tabPalette.tab.closeOthers",
+          "group": "7_close@2",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab|otherTab)$/"
+        },
+        {
+          "command": "tabPalette.tab.closeSaved",
+          "group": "7_close@3",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab|otherTab)$/"
+        },
+        {
+          "command": "tabPalette.tab.closeAll",
+          "group": "7_close@4",
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab|otherTab)$/"
         },
         {
           "command": "tabPalette.openGroup",

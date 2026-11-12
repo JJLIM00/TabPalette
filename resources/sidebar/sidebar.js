@@ -15,9 +15,52 @@
   let popup;
   let renameTimer;
 
+  /** Icon fonts of the file icon theme already added to the page, by family. */
+  const fontsLoaded = new Set();
+
+  /** Adds the theme's icon fonts (with the FontFace API: the page allows no inline styles). */
+  function loadFonts(fonts) {
+    for (const f of fonts) {
+      const id = f.family + ' ' + f.src;
+      if (fontsLoaded.has(id)) {
+        continue;
+      }
+      fontsLoaded.add(id);
+      try {
+        const face = new FontFace(f.family, f.src, { weight: f.weight || 'normal', style: f.style || 'normal' });
+        document.fonts.add(face);
+        face.load().then(() => undefined, () => undefined);
+      } catch {
+        // A font the browser can't read: its icons show as plain characters.
+      }
+    }
+  }
+
+  /** The tab's icon from the file icon theme (a picture or a font character), or a plain file icon. */
+  function fileIcon(icon) {
+    if (icon && icon.src) {
+      const span = el('span', 'icon themed');
+      span.style.backgroundImage = 'url("' + icon.src.replace(/"/g, '%22') + '")';
+      return span;
+    }
+    if (icon && icon.char) {
+      const span = el('span', 'icon themed glyph', icon.char);
+      span.style.fontFamily = '"' + icon.font + '"';
+      if (icon.color) {
+        span.style.color = icon.color;
+      }
+      if (icon.size) {
+        span.style.fontSize = icon.size;
+      }
+      return span;
+    }
+    return el('span', 'icon');
+  }
+
   window.addEventListener('message', (e) => {
     if (e.data && e.data.type === 'state') {
       state = e.data.state;
+      loadFonts(state.fonts || []);
       pruneSelection();
       render();
     } else if (e.data && e.data.type === 'edit') {
@@ -346,12 +389,19 @@
         : {
             webviewSection: !isFile ? 'otherTab' : tab.groupId ? 'groupedTab' : 'tab',
             uri: isFile ? tab.key : undefined,
+            // For the Open Editors items: which tab, and what they depend on.
+            row: row.index,
+            index: index,
+            key: tab.key,
+            tabDirty: tab.dirty,
+            tabScheme: isFile ? tab.key.slice(0, tab.key.indexOf(':')) : undefined,
             preventDefaultContextMenuItems: true,
           },
     );
 
-    const icon = el('span', 'icon codicon' + (tab.pinned ? ' pinned' : ''));
+    const icon = fileIcon(tab.icon);
     icon.setAttribute('aria-hidden', 'true');
+    item.classList.toggle('pinned', tab.pinned);
     const label = el('span', 'label', tab.label);
     item.append(icon, label);
     if (tab.description) {

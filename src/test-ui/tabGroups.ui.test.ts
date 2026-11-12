@@ -458,9 +458,12 @@ suite('TabPalette — used like a person would', function () {
       await vscode.startTabDrag('b.txt', { before: 'c.txt' });
       const color = await vscode.dropMarkerColor();
       await vscode.drop();
+      const dropped = Date.now();
 
       assert.strictEqual(color, COLORS.UngroupDropLine, 'while hovering, the drop line is red: releasing will ungroup the tab');
       await vscode.waitUntil('b.txt left Main', async () => (await groupOf('b.txt')) === null);
+      const took = Date.now() - dropped;
+      assert.ok(took < 250, `ungrouped right away, not after a wait (took ${took} ms)`);
       assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'b.txt', 'c.txt', 'd.txt'], 'the tab stays where it is, just outside the group');
       assert.strictEqual(await groupOf('a.txt'), 'Main');
     });
@@ -492,6 +495,15 @@ suite('TabPalette — used like a person would', function () {
       await vscode.dragTab('d.txt', { end: true });
       await vscode.waitUntil('d.txt left Main', async () => (await groupOf('d.txt')) === null);
       assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'b.txt', 'c.txt', 'd.txt']);
+      assert.strictEqual(await groupOf('c.txt'), 'Main');
+    });
+
+    test("dragging a group's middle tab to the empty end of the tab bar takes it out of the group", async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt', 'c.txt']);
+      await vscode.dragTab('b.txt', { end: true });
+      await vscode.waitUntil('b.txt left Main', async () => (await groupOf('b.txt')) === null);
+      assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'c.txt', 'd.txt', 'b.txt']);
+      assert.strictEqual(await groupOf('a.txt'), 'Main');
       assert.strictEqual(await groupOf('c.txt'), 'Main');
     });
 
@@ -555,6 +567,29 @@ suite('TabPalette — used like a person would', function () {
   // ------------------------------------------------------------------ group editor menu
 
   suite('group editor menu', () => {
+    test('"Move group to new window" moves every tab, and the new window shows the group', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt', 'c.txt'], 'Blue');
+      const other = await vscode.newWindowFrom(async () => {
+        await vscode.openGroupEditor('Main');
+        await vscode.groupEditorItem('Move group to new window');
+      });
+      try {
+        await vscode.waitUntil('the new window has the group with its 3 tabs', async () => {
+          const bar = await VSCodeWindow.tabBarOf(other);
+          return bar.tabs.join() === 'a.txt,b.txt,c.txt' && bar.chips.join() === 'Main';
+        });
+        assert.deepStrictEqual(await vscode.tabNames(), ['d.txt'], 'only d.txt is left here');
+        assert.deepStrictEqual(await vscode.chips(), [], 'no chip left here');
+      } finally {
+        // Like a user: close its tabs (Ctrl+K Ctrl+W), and the window closes with them.
+        const closed = other.waitForEvent('close', { timeout: 10_000 });
+        await other.bringToFront();
+        await other.keyboard.press('Control+K');
+        await other.keyboard.press('Control+W');
+        await closed;
+      }
+    });
+
     test('"Close group" closes its tabs and hides the chip; "Show Tab Groups" reopens it', async () => {
       await makeGroup('Later', ['a.txt', 'b.txt'], 'Cyan');
       await vscode.openGroupEditor('Later');
@@ -709,6 +744,16 @@ suite('TabPalette — used like a person would', function () {
       assert.strictEqual(header, COLORS.Blue);
     });
 
+    test('tabs show the same file icons as the tab bar (the file icon theme)', async () => {
+      await vscode.openSidebar();
+      for (const name of ['a.txt', 'b.txt']) {
+        await vscode.waitUntil(`${name} has its icon`, async () => (await vscode.sidebarIcon(name)).char !== '');
+        const icon = await vscode.sidebarIcon(name);
+        assert.strictEqual(icon.char, await vscode.tabBarIcon(name), `${name}: same icon as the tab bar`);
+        assert.ok(icon.fontLoaded, `${name}: the icon font has loaded`);
+      }
+    });
+
     test('a tab dragged onto a group in the side bar joins it there, in the tab bar too', async () => {
       await makeGroup('House move', ['a.txt', 'b.txt'], 'Blue');
       await vscode.openSidebar();
@@ -761,6 +806,43 @@ suite('TabPalette — used like a person would', function () {
       await vscode.press('Enter');
       await vscode.waitUntil('the side bar shows the named group', async () => (await vscode.sidebarLines()).includes('[Later]'));
       assert.strictEqual((await vscode.tab('c.txt')).group, 'Later');
+    });
+
+    test('right-click a tab in the side bar: the Tab Groups items, then the Open Editors menu', async () => {
+      await vscode.openSidebar();
+      const items = await vscode.sidebarTabMenuItems('b.txt');
+      assert.deepStrictEqual(items, [
+        'Add Tab to Group…', 'Add Tab to New Group', '---',
+        'Open to the Side', 'Reveal in File Explorer', '---',
+        'Copy Path', 'Copy Relative Path', '---',
+        'Reopen Editor With...', '---',
+        'Save (off)', 'Revert File (off)', '---',
+        'Compare with Saved (off)', 'Select for Compare', '---',
+        'Close', 'Close Others', 'Close Saved', 'Close All',
+      ]);
+    });
+
+    test('the side bar menu: Save and Revert for unsaved tabs, Compare with Selected after Select for Compare', async () => {
+      await vscode.openSidebar();
+      await vscode.clickTab('b.txt');
+      await vscode.type('x');
+      const has = (items: string[], ...names: string[]) => names.every((n) => items.includes(n));
+      await vscode.waitUntil('Save and Revert are on for the unsaved tab', async () =>
+        has(await vscode.sidebarTabMenuItems('b.txt'), 'Save', 'Revert File', 'Compare with Saved'),
+      );
+      await vscode.sidebarTabMenu('b.txt', 'Revert File');
+      await vscode.waitUntil('b.txt is saved again', async () => has(await vscode.sidebarTabMenuItems('b.txt'), 'Save (off)'));
+
+      assert.ok(!(await vscode.sidebarTabMenuItems('b.txt')).includes('Compare with Selected'), 'nothing selected for compare yet');
+      await vscode.sidebarTabMenu('a.txt', 'Select for Compare');
+      await vscode.sidebarTabMenu('b.txt', 'Compare with Selected');
+      await vscode.waitUntil('a diff opens', async () => (await vscode.tabNames()).some((n) => n.includes('↔')));
+    });
+
+    test('Close Others in the side bar menu closes the other tabs of that row', async () => {
+      await vscode.openSidebar();
+      await vscode.sidebarTabMenu('b.txt', 'Close Others');
+      await vscode.waitUntil('only b.txt is left', async () => (await vscode.tabNames()).join() === 'b.txt');
     });
 
     test('right-click on a group header opens the group settings popup, not a VS Code menu', async () => {

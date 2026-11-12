@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { WebSocket, WebSocketServer } from 'ws';
+import { TabGroup } from './model';
 import { GroupStore } from './store';
 import { tabUri } from './tabs';
 
@@ -34,7 +35,11 @@ export interface UiState {
   rows: { tabs: { label: string; group: string | null }[] }[];
 }
 
-export function buildState(store: GroupStore, rows: readonly vscode.TabGroup[]): UiState {
+export function buildState(
+  store: GroupStore,
+  rows: readonly vscode.TabGroup[],
+  groupIn: (row: vscode.TabGroup, uri: string) => TabGroup | undefined = (_, uri) => store.groupOf(uri),
+): UiState {
   return {
     type: 'state',
     groups: store
@@ -44,7 +49,7 @@ export function buildState(store: GroupStore, rows: readonly vscode.TabGroup[]):
     rows: rows.map((row) => ({
       tabs: row.tabs.map((t) => {
         const uri = tabUri(t)?.toString();
-        return { label: t.label, group: (uri && store.groupOf(uri)?.id) || null };
+        return { label: t.label, group: (uri && groupIn(row, uri)?.id) || null };
       }),
     })),
   };
@@ -59,6 +64,8 @@ export class Bridge implements vscode.Disposable {
   private timer: ReturnType<typeof setTimeout> | undefined;
   /** The selected tabs of each tab row, kept up to date by the tab bar (positions in the row). */
   private tabSelection = new Map<number, number[]>();
+  /** What each window's tab bar reported (each window shows its own tab rows). */
+  private readonly selectionBy = new Map<WebSocket, Map<number, number[]>>();
   private readonly selectionEmitter = new vscode.EventEmitter<void>();
   /** The tab bar's selection changed (see selectedIndexes). */
   readonly onDidChangeSelection = this.selectionEmitter.event;
@@ -67,6 +74,8 @@ export class Bridge implements vscode.Disposable {
     private readonly store: GroupStore,
     private readonly onAction: (action: UiAction) => unknown,
     private readonly rows: () => readonly vscode.TabGroup[] = () => vscode.window.tabGroups.all,
+    /** A tab's group in its row (a group lives in one row); by default, its file's group. */
+    private readonly groupIn?: (row: vscode.TabGroup, uri: string) => TabGroup | undefined,
   ) {}
 
   get port(): number | undefined {
@@ -95,6 +104,12 @@ export class Bridge implements vscode.Disposable {
       }
     }
     return undefined;
+  }
+
+  /** All windows' reports together, as one selection per tab row. */
+  private mergeSelection(): void {
+    this.tabSelection = new Map([...this.selectionBy.values()].flatMap((rows) => [...rows]));
+    this.selectionEmitter.fire();
   }
 
   /** Positions of the tabs selected in the tab bar in tab row `row` (the active tab counts as selected). */
@@ -162,17 +177,20 @@ export class Bridge implements vscode.Disposable {
         authed = true;
         clearTimeout(timeout);
         this.clients.add(socket);
-        socket.send(JSON.stringify(buildState(this.store, this.rows())));
+        socket.send(JSON.stringify(buildState(this.store, this.rows(), this.groupIn)));
         return;
       }
       if (msg.type === 'tabSelection') {
         const rows = Array.isArray(msg.rows) ? (msg.rows as { row?: unknown; indexes?: unknown }[]) : [];
-        this.tabSelection = new Map(
-          rows
-            .filter((r) => Number.isInteger(r?.row) && Array.isArray(r.indexes))
-            .map((r) => [r.row as number, (r.indexes as unknown[]).filter((i): i is number => Number.isInteger(i) && (i as number) >= 0)]),
+        this.selectionBy.set(
+          socket,
+          new Map(
+            rows
+              .filter((r) => Number.isInteger(r?.row) && Array.isArray(r.indexes))
+              .map((r) => [r.row as number, (r.indexes as unknown[]).filter((i): i is number => Number.isInteger(i) && (i as number) >= 0)]),
+          ),
         );
-        this.selectionEmitter.fire();
+        this.mergeSelection();
         return;
       }
       if (msg.type === 'action' && typeof msg.action === 'string' && typeof msg.groupId === 'string') {
@@ -186,9 +204,8 @@ export class Bridge implements vscode.Disposable {
     socket.on('close', () => {
       clearTimeout(timeout);
       this.clients.delete(socket);
-      if (this.clients.size === 0 && this.tabSelection.size > 0) {
-        this.tabSelection.clear();
-        this.selectionEmitter.fire();
+      if (this.selectionBy.delete(socket)) {
+        this.mergeSelection();
       }
     });
     socket.on('error', () => socket.close());
@@ -223,7 +240,7 @@ export class Bridge implements vscode.Disposable {
     if (this.clients.size === 0) {
       return;
     }
-    const message = JSON.stringify(buildState(this.store, this.rows()));
+    const message = JSON.stringify(buildState(this.store, this.rows(), this.groupIn));
     if (message !== this.lastState) {
       this.lastState = message;
       this.sendAll(message);

@@ -58,6 +58,7 @@ Click the **Tab Groups** icon in the Activity Bar to see every open tab as a lis
 |---|---|
 | Open or close a tab | Click it. Click its **×**, or middle-click it, to close it. |
 | Collapse or expand a group | Click its header. A collapsed header shows how many tabs it holds. |
+| Use a tab's menu | Right-click the tab: the Tab Groups items come first, then the same items as in the Explorer's **Open Editors** list (Open to the Side, Reveal in File Explorer, Copy Path, Save, Compare, Close Others and the like). |
 | Select several tabs | Ctrl+click (Cmd+click on macOS) to add or remove a tab, Shift+click to select a range. Drag one of them to move them all, right-click for **Add Selected Tabs to Group…** and the like, or press Delete to close them. A plain click clears the selection. While the tab bar patch is on, the side bar and the tab bar share one selection. |
 | Add a tab to a group | Drag it onto one of the group's tabs (it lands there) or onto the group's header (it becomes the first tab). |
 | Take a tab out of its group | Drag it next to a tab outside the group, or onto the empty space below the list. |

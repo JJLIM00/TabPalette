@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { MembershipTracker, order } from './membership';
+import { TabGroup } from './model';
 import { GroupStore } from './store';
 import { CloseGuard, openFiles, tabUri } from './tabs';
 
@@ -54,11 +55,11 @@ export class Layout {
   /**
    * Chrome: grouped tabs dropped outside their group (on an ungrouped tab, a chip, or the
    * empty end of the tab bar) leave the group, even if the tab order did not change, e.g. the
-   * group's last tab dragged a little to the right. Waits briefly for VS Code's own move
-   * first, so the tabs are judged where they landed. Returns how many tabs left.
+   * group's last tab dragged a little to the right. The tab bar only reports drops outside the
+   * group, so they leave at once, without waiting for VS Code's own move (that move can come
+   * before or after this report). Returns how many tabs left.
    */
-  async leaveDroppedTabs(groupId: string, rowIndex: number, labels: string[], settleMs = 300): Promise<number> {
-    await new Promise((r) => setTimeout(r, settleMs));
+  async leaveDroppedTabs(groupId: string, rowIndex: number, labels: string[]): Promise<number> {
     const row = vscode.window.tabGroups.all[rowIndex];
     if (!row || !this.store.get(groupId)) {
       return 0;
@@ -70,6 +71,41 @@ export class Layout {
       this.store.pruneEmpty();
     }
     return leaving.length;
+  }
+
+  /**
+   * Opens the files that have no tab yet (e.g. several files picked in the Explorer), so all
+   * of them can join the group. Folders are skipped. Returns the files that have a tab now.
+   */
+  async openMissing(uris: string[]): Promise<string[]> {
+    const open = new Set(vscode.window.tabGroups.all.flatMap((row) => order(row)));
+    const missing: string[] = [];
+    for (const u of uris) {
+      if (open.has(u)) {
+        continue;
+      }
+      const stat = await Promise.resolve(vscode.workspace.fs.stat(vscode.Uri.parse(u))).catch(() => undefined);
+      if (stat && !(stat.type & vscode.FileType.Directory)) {
+        missing.push(u);
+      }
+    }
+    if (missing.length > 0) {
+      // In the active row, keeping the focus where it is. Not a user's move: no joining.
+      await this.tracker.suspend(async () => {
+        for (const u of missing) {
+          await Promise.resolve(
+            vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(u), { preview: false, preserveFocus: true }),
+          ).catch(() => undefined);
+        }
+      });
+    }
+    const nowOpen = new Set(vscode.window.tabGroups.all.flatMap((row) => order(row)));
+    return uris.filter((u) => nowOpen.has(u));
+  }
+
+  /** The group of the tab with this URI in this tab row (a group lives in one row). */
+  groupIn(row: vscode.TabGroup, uri: string): TabGroup | undefined {
+    return this.tracker.groupIn(row, uri);
   }
 
   /**
@@ -100,10 +136,11 @@ export class Layout {
    * Chrome keeps a group's tabs together: move each of `uris` (tabs just added to their
    * group) next to the group's other tabs. Added to an existing group, a tab goes after
    * the group's last tab. When every tab of the group is new (a new group made from
-   * several tabs), the group forms where its leftmost tab is.
+   * several tabs), the group forms where its leftmost tab is. A group lives in one tab row:
+   * a tab added from another row moves there first.
    */
   async placeInGroup(uris: string[]): Promise<void> {
-    const before = activeLocation();
+    let before = activeLocation();
     const added = new Set(uris);
     const position = (u: string) => {
       const row = vscode.window.tabGroups.all.find((r) => order(r).includes(u));
@@ -115,6 +152,10 @@ export class Layout {
     const placed = new Map<string, Set<string>>();
     let movedAny = false;
     await this.tracker.suspend(async () => {
+      movedAny = await this.bringHome(uris);
+      if (movedAny && before && !vscode.window.tabGroups.all.some((r) => r.viewColumn === before!.viewColumn && order(r).includes(before!.uri.toString()))) {
+        before = activeLocation(); // the active tab moved to its group's row: it stays active there
+      }
       for (const uri of [...uris].sort((x, y) => position(x) - position(y))) {
         const group = this.store.groupOf(uri);
         if (!group) {
@@ -126,7 +167,8 @@ export class Layout {
           placed.set(group.id, inPlace);
         }
         const isPlaced = (u: string) => inPlace.has(u);
-        for (const row of vscode.window.tabGroups.all) {
+        const home = this.tracker.homeOf(group.id);
+        for (const row of home ? [home] : []) {
           const current = order(row);
           const index = current.indexOf(uri);
           if (index < 0) {
@@ -160,6 +202,44 @@ export class Layout {
         await vscode.commands.executeCommand('vscode.open', before.uri, { viewColumn: before.viewColumn, preview: false });
       }
     });
+  }
+
+  /**
+   * After opening `uri` in tab row `kept`: closes its tab in the other rows (completing a move).
+   * VS Code reports the new tab a moment later, and only then are the tab objects current.
+   */
+  private async closeElsewhere(uri: string, kept: vscode.TabGroup): Promise<void> {
+    if (!(await settled(() => order(kept).includes(uri)))) {
+      return; // it did not open there: keep the tab where it is
+    }
+    const others = vscode.window.tabGroups.all.flatMap((r) => (r === kept ? [] : r.tabs)).filter((t) => tabUri(t)?.toString() === uri);
+    if (others.length > 0) {
+      await vscode.window.tabGroups.close(others, true);
+    }
+  }
+
+  /**
+   * Moves tabs of `uris` that are open in another tab row than their group's home row into
+   * that row (opened there, then closed where they were). Returns whether any moved.
+   */
+  private async bringHome(uris: string[]): Promise<boolean> {
+    let moved = false;
+    for (const uri of uris) {
+      const group = this.store.groupOf(uri);
+      const home = group && this.tracker.homeOf(group.id);
+      if (!home || order(home).includes(uri)) {
+        continue;
+      }
+      const from = vscode.window.tabGroups.all.find((r) => order(r).includes(uri));
+      const tab = from?.tabs[order(from).indexOf(uri)];
+      if (!tab) {
+        continue;
+      }
+      await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(uri), { viewColumn: home.viewColumn, preview: false });
+      await this.closeElsewhere(uri, home);
+      moved = true;
+    }
+    return moved;
   }
 
   /**
@@ -373,14 +453,21 @@ export class Layout {
     if (tabs.length === 0) {
       return;
     }
+    const uris = tabs.map(({ tab }) => tabUri(tab)!.toString());
+    const rowsBefore = new Set(vscode.window.tabGroups.all);
     await this.tracker.suspend(async () => {
-      const [first, ...rest] = tabs;
+      const first = tabs[0];
       await vscode.commands.executeCommand('vscode.open', tabUri(first.tab), { viewColumn: first.row.viewColumn, preview: false });
       await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
-      const target = vscode.window.tabGroups.activeTabGroup.viewColumn;
-      for (const { tab } of rest) {
-        await vscode.commands.executeCommand('vscode.open', tabUri(tab), { viewColumn: target, preview: false });
-        await vscode.window.tabGroups.close(tab, true);
+      // VS Code reports the new window's tab row a moment later: wait for it, or the other
+      // tabs would be opened (and then closed) in the row they are already in.
+      const target = await settled(() => vscode.window.tabGroups.all.find((r) => !rowsBefore.has(r) && order(r).includes(uris[0])));
+      if (!target) {
+        return;
+      }
+      for (const uri of uris.slice(1)) {
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(uri), { viewColumn: target.viewColumn, preview: false });
+        await this.closeElsewhere(uri, target);
       }
     });
     this.store.setCollapsed(groupId, false);
@@ -459,8 +546,9 @@ export function droppedNextToGroup(
 /**
  * Of the dragged tabs (`labels`: one tab, or all selected tabs), the grouped ones that were
  * dropped outside their group and should leave it. None when the drag held all of the
- * group's tabs (they carry the group along). A dragged tab stays when it landed between two
- * group tabs that were not dragged (it is inside the group).
+ * group's tabs (they carry the group along). Where the tabs are does not matter: the report
+ * may come before VS Code moves them. (A tab that VS Code then puts between two of the
+ * group's tabs joins again, as any tab moved there does.)
  */
 export function droppedOutOfGroup(
   row: readonly { label: string; uri: string }[],
@@ -478,22 +566,19 @@ export function droppedOutOfGroup(
   if (dragged.size === 0 || !row.some((_, i) => stays(i))) {
     return [];
   }
-  // Nearest tab on each side that was not dragged along.
-  const neighbor = (i: number, step: number) => {
-    for (let j = i + step; j >= 0 && j < row.length; j += step) {
-      if (!dragged.has(j)) {
-        return j;
-      }
+  return [...dragged].map((i) => row[i].uri);
+}
+
+/** Waits (up to 1 s) until `check` gives a value: VS Code reports tab changes a moment after a command. */
+async function settled<T>(check: () => T | undefined | false): Promise<T | undefined> {
+  for (let i = 0; i < 50; i++) {
+    const value = check();
+    if (value) {
+      return value;
     }
-    return -1;
-  };
-  return [...dragged]
-    .filter((i) => {
-      const left = neighbor(i, -1);
-      const right = neighbor(i, 1);
-      return !(left >= 0 && right >= 0 && stays(left) && stays(right));
-    })
-    .map((i) => row[i].uri);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return undefined;
 }
 
 function activeLocation(): { uri: vscode.Uri; viewColumn: vscode.ViewColumn } | undefined {

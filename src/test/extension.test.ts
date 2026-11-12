@@ -28,6 +28,11 @@ async function open(name: string): Promise<void> {
   await waitFor(`${name} is the active tab`, () => activeTab() === name);
 }
 
+/** File names of the tabs in a tab row, left to right. */
+function tabBarOf(row: vscode.TabGroup): string[] {
+  return row.tabs.map((t) => nameOf(tabUri(t)?.toString() ?? '?'));
+}
+
 /** File names of the tabs in the active tab row, left to right. */
 function tabBar(): string[] {
   return vscode.window.tabGroups.activeTabGroup.tabs.map((t) => nameOf(tabUri(t)?.toString() ?? '?'));
@@ -201,6 +206,19 @@ suite('TabPalette in a real VS Code window', () => {
       assert.strictEqual(await vscode.env.clipboard.readText(), 'user clipboard');
     });
 
+    test('files picked in the Explorer that have no tab yet are opened and all join the group', async () => {
+      await run('workbench.action.closeAllEditors');
+      await waitFor('all tabs are closed', () => openUris().size === 0);
+      await open('a.txt');
+      const main = makeGroup('Main', 'color2', ['a.txt']);
+      answerPrompts({ pick: ['Main'] });
+      // The Explorer passes the right-clicked file and every selected file (a folder is skipped).
+      await run('tabPalette.addToGroup', fileUri('b.txt'), [fileUri('b.txt'), fileUri('c.txt'), workspaceRoot()]);
+      await settle();
+      assert.deepStrictEqual(members(main), ['a.txt', 'b.txt', 'c.txt']);
+      assert.deepStrictEqual(tabBar(), ['a.txt', 'b.txt', 'c.txt']);
+    });
+
     test('copied tab paths are matched back to open tabs (how multi-selection is read)', () => {
       const [a, b] = [fileUri('a.txt'), fileUri('b.txt')];
       const otherCase = (p: string) => (process.platform === 'win32' ? p.replace(/\\/g, '/').toUpperCase() : p);
@@ -269,6 +287,85 @@ suite('TabPalette in a real VS Code window', () => {
       await open('d.txt'); // VS Code opens it right after the active tab: between a and b
       assert.deepStrictEqual(tabBar(), ['a.txt', 'd.txt', 'b.txt', 'c.txt']);
       assert.strictEqual(groupNameOf('d.txt'), 'Main');
+    });
+  });
+
+  suite('tabs in other editor groups (a group lives in one, like a Chrome window)', () => {
+    teardown(async () => {
+      await run('workbench.action.joinAllGroups');
+    });
+
+    /** The group shown for each tab of tab row `row` in the tab bar's state ('-' for none). */
+    const shownGroups = (row: number) =>
+      vscode.window.tabGroups.all[row].tabs.map((t) => {
+        const g = api.layout.groupIn(vscode.window.tabGroups.all[row], tabUri(t)!.toString());
+        return nameOf(tabUri(t)!.toString()) + ':' + (g?.name ?? '-');
+      });
+
+    test('a grouped tab dragged to another editor group leaves its group', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
+      await open('b.txt');
+      await run('workbench.action.moveEditorToNextGroup');
+      await waitFor('b.txt is in a second editor group', () => vscode.window.tabGroups.all.length === 2 && tabBar().join() === 'b.txt');
+      await waitFor('b.txt left Main', () => groupNameOf('b.txt') === undefined);
+      assert.deepStrictEqual(members(main), ['a.txt']);
+    });
+
+    test("a group's only tab dragged to another editor group takes the group along", async () => {
+      const solo = makeGroup('Solo', 'color5', ['b.txt']);
+      await open('b.txt');
+      await run('workbench.action.moveEditorToNextGroup');
+      await waitFor('b.txt is in a second editor group', () => vscode.window.tabGroups.all.length === 2 && tabBar().join() === 'b.txt');
+      await settle();
+      assert.deepStrictEqual(members(solo), ['b.txt']);
+      assert.deepStrictEqual(shownGroups(1), ['b.txt:Solo']);
+    });
+
+    test('Open to the Side: the new tab is not grouped, the grouped tab stays in its group', async () => {
+      makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
+      await vscode.commands.executeCommand('vscode.open', fileUri('b.txt'), { viewColumn: vscode.ViewColumn.Beside, preview: false });
+      await waitFor('b.txt is open on the side', () => vscode.window.tabGroups.all.length === 2);
+      await settle();
+      assert.strictEqual(groupNameOf('b.txt'), 'Main', 'b.txt is still in Main');
+      assert.deepStrictEqual(shownGroups(0), ['a.txt:Main', 'b.txt:Main', 'c.txt:-', 'd.txt:-']);
+      assert.deepStrictEqual(shownGroups(1), ['b.txt:-']);
+      const sidebar = api.sidebar.state();
+      assert.deepStrictEqual(sidebar.rows[1].tabs.map((t) => t.groupId ?? '-'), ['-'], 'not grouped in the side bar either');
+    });
+
+    test('"Move group to new window" moves every tab of the group, and the group goes along', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt', 'c.txt']);
+      const rowsBefore = new Set(vscode.window.tabGroups.all);
+      await run('tabPalette.moveGroupToNewWindow', main.id);
+      const moved = () => vscode.window.tabGroups.all.find((r) => !rowsBefore.has(r));
+      await waitFor('the group is in a new window', () => (moved()?.tabs.length ?? 0) === 3);
+      await settle(300);
+      const row = moved()!;
+      assert.deepStrictEqual(row.tabs.map((t) => nameOf(tabUri(t)!.toString())), ['a.txt', 'b.txt', 'c.txt']);
+      assert.deepStrictEqual(members(main), ['a.txt', 'b.txt', 'c.txt'], 'still one group');
+      assert.deepStrictEqual(
+        row.tabs.map((t) => api.layout.groupIn(row, tabUri(t)!.toString())?.name),
+        ['Main', 'Main', 'Main'],
+        'grouped in the new window',
+      );
+      assert.deepStrictEqual(tabBarOf(vscode.window.tabGroups.all[0]), ['d.txt'], 'only d.txt is left in the first window');
+      await run('workbench.action.closeAllEditors'); // closes the new window too
+      for (const r of vscode.window.tabGroups.all.filter((r) => !rowsBefore.has(r))) {
+        await vscode.window.tabGroups.close(r);
+      }
+    });
+
+    test('a tab added to a group from another editor group moves to the group', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt']);
+      await open('d.txt');
+      await run('workbench.action.moveEditorToNextGroup');
+      await waitFor('d.txt is in a second editor group', () => vscode.window.tabGroups.all.length === 2);
+      answerPrompts({ pick: ['Main'] });
+      await run('tabPalette.addToGroup', fileUri('d.txt'));
+      await settle(300);
+      assert.deepStrictEqual(members(main), ['a.txt', 'd.txt']);
+      assert.deepStrictEqual(shownGroups(0).slice(0, 2), ['a.txt:Main', 'd.txt:Main']);
+      assert.ok(!vscode.window.tabGroups.all.slice(1).some((r) => r.tabs.length > 0), 'not left in the other editor group');
     });
   });
 
@@ -795,7 +892,7 @@ suite('TabPalette in a real VS Code window', () => {
 
     test("a group's only tab dropped outside the group keeps its group", async () => {
       const solo = makeGroup('Solo', 'color5', ['d.txt']);
-      assert.strictEqual(await api.layout.leaveDroppedTabs(solo.id, 0, ['d.txt'], 0), 0, 'no tab leaves');
+      assert.strictEqual(await api.layout.leaveDroppedTabs(solo.id, 0, ['d.txt']), 0, 'no tab leaves');
       assert.deepStrictEqual(members(solo), ['d.txt']);
     });
 
