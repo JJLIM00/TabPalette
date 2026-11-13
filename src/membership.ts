@@ -193,8 +193,8 @@ export class MembershipTracker implements vscode.Disposable {
     // Closed tabs leave their group (Chrome), unless we closed them (Close group, Delete group).
     const stillOpen = e.closed.length > 0 ? new Set(vscode.window.tabGroups.all.flatMap((g) => order(g))) : undefined;
     const closed = e.closed
-      .map((t) => tabUri(t)?.toString())
-      .filter((u): u is string => !!u && !stillOpen!.has(u) && !this.guard.consume(u) && !!this.store.groupOf(u));
+      .map((t) => tabUri(t).toString())
+      .filter((u) => !stillOpen!.has(u) && !this.guard.consume(u) && !!this.store.groupOf(u));
     if (closed.length > 0) {
       this.store.removeUris(closed);
       this.store.pruneEmpty();
@@ -203,8 +203,8 @@ export class MembershipTracker implements vscode.Disposable {
     // Chrome: pinned tabs are never in a group, so pinning a grouped tab takes it out.
     const pinned = [...e.opened, ...e.changed]
       .filter((t) => t.isPinned)
-      .map((t) => tabUri(t)?.toString())
-      .filter((u): u is string => !!u && !!this.store.groupOf(u));
+      .map((t) => tabUri(t).toString())
+      .filter((u) => !!this.store.groupOf(u));
     if (pinned.length > 0) {
       this.store.removeUris(pinned);
       this.store.pruneEmpty();
@@ -218,7 +218,7 @@ export class MembershipTracker implements vscode.Disposable {
           continue;
         }
         const groupOf = (u: string) => this.groupIn(group, u)?.id;
-        const activeTab = group.activeTab ? tabUri(group.activeTab)?.toString() : undefined;
+        const activeTab = group.activeTab ? tabUri(group.activeTab).toString() : undefined;
         const moved = movedItem(before, after, activeTab);
         let target: string | undefined = moved;
         let allowLeave = true;
@@ -244,7 +244,7 @@ export class MembershipTracker implements vscode.Disposable {
     // Activating a hidden tab of a collapsed group expands it (Chrome).
     const activeRow = vscode.window.tabGroups.activeTabGroup;
     const active = activeRow.activeTab;
-    const uri = active ? tabUri(active)?.toString() : undefined;
+    const uri = active ? tabUri(active).toString() : undefined;
     const g = uri ? this.groupIn(activeRow, uri) : undefined;
     if (g?.collapsed && this.suspended === 0) {
       this.store.setCollapsed(g.id, false);
@@ -257,5 +257,5 @@ export class MembershipTracker implements vscode.Disposable {
 }
 
 export function order(group: vscode.TabGroup): string[] {
-  return group.tabs.map((t) => tabUri(t)?.toString() ?? `#${t.label}`);
+  return group.tabs.map((t) => tabUri(t).toString());
 }

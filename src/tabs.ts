@@ -1,7 +1,16 @@
 import * as vscode from 'vscode';
 
-/** The file a tab shows, or undefined for tabs that are not file-backed (settings, webviews, terminals…). */
-export function tabUri(tab: vscode.Tab): vscode.Uri | undefined {
+/** Scheme of the keys of tabs that show no file (webviews like Git Graph, terminals, settings…). */
+const OTHER_TAB_SCHEME = 'tabpalette-tab';
+
+/** The key each tab that shows no file got when first seen (see otherTabUri). */
+const otherKeys = new WeakMap<vscode.Tab, vscode.Uri>();
+
+/**
+ * The tab's key, which groups store: the file it shows, or for any other tab (a webview like
+ * Git Graph, a terminal, the settings…) a `tabpalette-tab:` URI made of its kind and title.
+ */
+export function tabUri(tab: vscode.Tab): vscode.Uri {
   const input = tab.input;
   if (
     input instanceof vscode.TabInputText ||
@@ -13,7 +22,38 @@ export function tabUri(tab: vscode.Tab): vscode.Uri | undefined {
   if (input instanceof vscode.TabInputTextDiff || input instanceof vscode.TabInputNotebookDiff) {
     return input.modified;
   }
-  return undefined;
+  return otherTabUri(tab);
+}
+
+/** True for the key of a tab that shows no file: it can only be shown, not opened again. */
+export function isOtherTab(key: string | vscode.Uri): boolean {
+  return typeof key === 'string' ? key.startsWith(`${OTHER_TAB_SCHEME}:`) : key.scheme === OTHER_TAB_SCHEME;
+}
+
+/**
+ * Tabs that show no file have no URI, so their key is their kind and title, which stays the
+ * same after a reload. A tab keeps the key it got first while it is open (its title may
+ * change). Two tabs with the same kind and title in one tab row (two "Claude Code" tabs) are
+ * told apart by a number; in different rows they share the key, like one file open in two
+ * rows (and a tab moved to another row keeps its key, though VS Code reports it opened there
+ * before it closed here).
+ */
+function otherTabUri(tab: vscode.Tab): vscode.Uri {
+  const known = otherKeys.get(tab);
+  if (known) {
+    return known;
+  }
+  const input = tab.input;
+  const kind =
+    input instanceof vscode.TabInputWebview ? input.viewType : input instanceof vscode.TabInputTerminal ? 'terminal' : 'editor';
+  const base = vscode.Uri.from({ scheme: OTHER_TAB_SCHEME, path: `/${kind}/${tab.label}` });
+  const taken = new Set(tab.group.tabs.map((t) => otherKeys.get(t)?.toString()));
+  let key = base;
+  for (let n = 2; taken.has(key.toString()); n++) {
+    key = base.with({ query: String(n) });
+  }
+  otherKeys.set(tab, key);
+  return key;
 }
 
 export function allTabs(): vscode.Tab[] {
@@ -24,10 +64,7 @@ export function allTabs(): vscode.Tab[] {
 export function openUris(): Set<string> {
   const set = new Set<string>();
   for (const tab of allTabs()) {
-    const uri = tabUri(tab);
-    if (uri) {
-      set.add(uri.toString());
-    }
+    set.add(tabUri(tab).toString());
   }
   return set;
 }
@@ -35,6 +72,22 @@ export function openUris(): Set<string> {
 export function activeTabUri(): vscode.Uri | undefined {
   const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
   return tab ? tabUri(tab) : undefined;
+}
+
+/**
+ * The key of the tab a tab context-menu command was run on. VS Code passes the tab's resource
+ * and `{ editorIndex }`. A tab that shows no file has a resource no tab key matches (a webview
+ * gets a new `webview-panel:` URI each time it opens), so find it by its position, in the
+ * active row first.
+ */
+export function menuTabUri(resource: vscode.Uri | undefined, context: unknown): vscode.Uri | undefined {
+  const index = (context as { editorIndex?: unknown } | undefined)?.editorIndex;
+  if ((resource && openUris().has(resource.toString())) || typeof index !== 'number') {
+    return resource;
+  }
+  const rows = [vscode.window.tabGroups.activeTabGroup, ...vscode.window.tabGroups.all];
+  const tab = rows.map((row) => row.tabs[index]).find((t) => t && isOtherTab(tabUri(t)));
+  return tab ? tabUri(tab) : resource;
 }
 
 /**
@@ -68,7 +121,7 @@ export async function selectedTabUris(
   } finally {
     await vscode.env.clipboard.writeText(saved);
   }
-  const matched = matchCopiedPaths(copied, allTabs().map(tabUri).filter((u): u is vscode.Uri => !!u));
+  const matched = matchCopiedPaths(copied, allTabs().map(tabUri));
   return matched.length > 0 ? matched : [anchor.toString()];
 }
 
@@ -109,10 +162,7 @@ export class CloseGuard {
 
   async closeTabsFor(uris: Iterable<string>): Promise<boolean> {
     const wanted = new Set(uris);
-    const tabs = allTabs().filter((t) => {
-      const uri = tabUri(t);
-      return uri !== undefined && wanted.has(uri.toString());
-    });
+    const tabs = allTabs().filter((t) => wanted.has(tabUri(t).toString()));
     if (tabs.length === 0) {
       return true;
     }

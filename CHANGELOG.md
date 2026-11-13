@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- Tabs that show no file can join groups: webviews like Git Graph and Claude Code, terminals in the editor, Keyboard Shortcuts and other special editors. Right-click them on the tab bar or in the side bar, or drag them into a group, like any tab. On the tab bar, "Add Tab to Group…" on a grouped one offers "Remove from group". The side bar shows their icons, the same as the tab bar: the pictures of webviews like Git Graph and Claude Code, and the symbols of Settings, Extension pages and Keyboard Shortcuts.
+
 ## 0.2.1
 
 - The side bar's tab menu now has the same items as the Explorer's Open Editors list, below the Tab Groups items: Open to the Side, Reveal in File Explorer, Copy Path, Copy Relative Path, Reopen Editor With..., Save, Revert File, Compare with Saved, Select for Compare / Compare with Selected, Close, Close Others, Close Saved and Close All. Save, Revert File and Compare with Saved are greyed out for saved tabs, as in VS Code.

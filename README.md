@@ -126,9 +126,7 @@ Before you uninstall, run **Tab Groups: Disable Chrome-style Tab Groups** from t
 
 ## Known limitations
 
-- Chips are drawn in the main window only. Groups moved to a new window keep their tabs, but are not drawn there.
-- Only file tabs can be grouped. Settings, the Welcome page and other special editors can't join a group.
-- The side bar shows a plain file icon for every tab, not your file icon theme's icons (VS Code doesn't share them with extensions).
+- Tabs that show no file (Git Graph, Claude Code, Keyboard Shortcuts, terminals…) can be grouped, with some limits. They are known by their title, so one renamed after a reload is no longer in its group. "Close group" closes them for good: reopening the group opens only its files. "Move group to new window" only moves them when one is the group's first tab. On the tab bar, a grouped one shows "Add Tab to Group…" instead of the Tab Group submenu; its picker has "Remove from group".
 - Works in VS Code desktop only, not in VS Code for the Web or in Codespaces in the browser.
 
 ## Feedback

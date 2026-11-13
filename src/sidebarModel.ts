@@ -1,6 +1,6 @@
 /**
  * Pure rules for the Tab Groups side bar (unit-tested). A tab row is the list of tab keys of
- * one editor group, in order: `Uri.toString()` for file tabs, `#<label>` for other tabs.
+ * one editor group, in order (see `order()` in membership.ts).
  */
 
 /** Where a dragged tab was dropped in the side bar. */
@@ -57,10 +57,7 @@ export function planTabDrop(
   }
   const to = insert > from ? insert - 1 : insert;
   const onlyMember = !!own && !row.some((k, i) => i !== from && groupOf(k) === own);
-  let group = targetGroup ?? (onlyMember ? own : undefined);
-  if (key.startsWith('#')) {
-    group = undefined;
-  }
+  const group = targetGroup ?? (onlyMember ? own : undefined);
   return to === from && group === own ? undefined : { to, group };
 }
 
@@ -114,15 +111,14 @@ export function planTabsDrop(
   const others = row.filter((_, i) => !dragged.has(i));
   const othersBefore = row.slice(0, insert).filter((_, i) => !dragged.has(i)).length;
   const order = [...others.slice(0, othersBefore), ...keys, ...others.slice(othersBefore)];
-  const files = keys.filter((k) => !k.startsWith('#'));
   const leaving = group
     ? []
-    : files.filter((k) => {
+    : keys.filter((k) => {
         const g = groupOf(k);
         return !!g && others.some((o) => groupOf(o) === g);
       });
   const moved = order.some((k, i) => k !== row[i]);
-  const joining = !!group && files.some((k) => groupOf(k) !== group);
+  const joining = !!group && keys.some((k) => groupOf(k) !== group);
   return moved || joining || leaving.length > 0 ? { order, othersBefore, group, leaving } : undefined;
 }
 

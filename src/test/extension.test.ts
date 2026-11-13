@@ -18,7 +18,7 @@ import { matchCopiedPaths, openUris, selectedTabUris, tabUri } from '../tabs';
 const workspaceRoot = () => vscode.workspace.workspaceFolders![0].uri;
 const fileUri = (name: string) => vscode.Uri.joinPath(workspaceRoot(), name);
 const id = (name: string) => fileUri(name).toString();
-const nameOf = (uri: string) => uri.slice(uri.lastIndexOf('/') + 1);
+const nameOf = (uri: string) => decodeURIComponent(uri.slice(uri.lastIndexOf('/') + 1).replace(/\?.*$/, ''));
 
 let api: TabGroupsApi;
 
@@ -30,17 +30,17 @@ async function open(name: string): Promise<void> {
 
 /** File names of the tabs in a tab row, left to right. */
 function tabBarOf(row: vscode.TabGroup): string[] {
-  return row.tabs.map((t) => nameOf(tabUri(t)?.toString() ?? '?'));
+  return row.tabs.map((t) => nameOf(tabUri(t).toString()));
 }
 
 /** File names of the tabs in the active tab row, left to right. */
 function tabBar(): string[] {
-  return vscode.window.tabGroups.activeTabGroup.tabs.map((t) => nameOf(tabUri(t)?.toString() ?? '?'));
+  return vscode.window.tabGroups.activeTabGroup.tabs.map((t) => nameOf(tabUri(t).toString()));
 }
 
 function activeTab(): string | undefined {
   const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
-  return tab ? nameOf(tabUri(tab)?.toString() ?? '?') : undefined;
+  return tab ? nameOf(tabUri(tab).toString()) : undefined;
 }
 
 const isOpen = (name: string) => openUris().has(id(name));
@@ -298,8 +298,8 @@ suite('TabPalette in a real VS Code window', () => {
     /** The group shown for each tab of tab row `row` in the tab bar's state ('-' for none). */
     const shownGroups = (row: number) =>
       vscode.window.tabGroups.all[row].tabs.map((t) => {
-        const g = api.layout.groupIn(vscode.window.tabGroups.all[row], tabUri(t)!.toString());
-        return nameOf(tabUri(t)!.toString()) + ':' + (g?.name ?? '-');
+        const g = api.layout.groupIn(vscode.window.tabGroups.all[row], tabUri(t).toString());
+        return nameOf(tabUri(t).toString()) + ':' + (g?.name ?? '-');
       });
 
     test('a grouped tab dragged to another editor group leaves its group', async () => {
@@ -341,10 +341,10 @@ suite('TabPalette in a real VS Code window', () => {
       await waitFor('the group is in a new window', () => (moved()?.tabs.length ?? 0) === 3);
       await settle(300);
       const row = moved()!;
-      assert.deepStrictEqual(row.tabs.map((t) => nameOf(tabUri(t)!.toString())), ['a.txt', 'b.txt', 'c.txt']);
+      assert.deepStrictEqual(row.tabs.map((t) => nameOf(tabUri(t).toString())), ['a.txt', 'b.txt', 'c.txt']);
       assert.deepStrictEqual(members(main), ['a.txt', 'b.txt', 'c.txt'], 'still one group');
       assert.deepStrictEqual(
-        row.tabs.map((t) => api.layout.groupIn(row, tabUri(t)!.toString())?.name),
+        row.tabs.map((t) => api.layout.groupIn(row, tabUri(t).toString())?.name),
         ['Main', 'Main', 'Main'],
         'grouped in the new window',
       );
@@ -370,8 +370,81 @@ suite('TabPalette in a real VS Code window', () => {
     });
   });
 
+  suite('tabs that show no file (webviews like Git Graph or Claude Code)', () => {
+    /** Opens a webview tab titled `title` in tab row `viewColumn`, and waits for its tab. */
+    async function openWebview(title: string, viewColumn = vscode.ViewColumn.Active): Promise<vscode.WebviewPanel> {
+      const count = () => vscode.window.tabGroups.all.flatMap((r) => r.tabs).filter((t) => t.label === title).length;
+      const before = count();
+      const panel = vscode.window.createWebviewPanel('tabPalette.test', title, viewColumn);
+      await waitFor(`the ${title} tab is open`, () => count() === before + 1);
+      return panel;
+    }
+    const keyOf = (title: string, nth = 0) =>
+      tabUri(vscode.window.tabGroups.all.flatMap((r) => r.tabs).filter((t) => t.label === title)[nth]).toString();
+
+    test('they get a key from their kind and title; two with the same title get different keys', async () => {
+      await openWebview('Graph');
+      await openWebview('Graph');
+      const [first, second] = [keyOf('Graph', 0), keyOf('Graph', 1)];
+      assert.ok(first.startsWith('tabpalette-tab:'), first);
+      assert.notStrictEqual(first, second);
+      assert.strictEqual(keyOf('Graph', 0), first, 'a tab keeps its key');
+    });
+
+    test('a webview tab joins a group from the tab bar menu, which passes its webview resource and position', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
+      await openWebview('Graph');
+      const index = tabBar().indexOf(nameOf(keyOf('Graph')));
+      answerPrompts({ pick: ['Main'] });
+      // VS Code passes a webview tab's resource as a `webview-panel:` URI no tab key matches.
+      await run('tabPalette.addToGroup', vscode.Uri.parse('webview-panel:webview-panel/webview-1'), { groupId: 1, editorIndex: index });
+      await settle(300);
+      assert.deepStrictEqual(members(main), ['a.txt', 'b.txt', 'Graph']);
+      assert.deepStrictEqual(tabBar(), ['a.txt', 'b.txt', 'Graph', 'c.txt', 'd.txt'], 'it moved next to the group');
+      assert.strictEqual(activeTab(), 'Graph', 'and stays the active tab');
+    });
+
+    test('the tab bar menu offers "Remove from group" for a grouped tab', async () => {
+      await openWebview('Graph');
+      const main = api.store.create('Main', 'color2', [id('a.txt'), keyOf('Graph')]);
+      const index = tabBar().indexOf('Graph');
+      answerPrompts({ pick: ['Remove from group'] });
+      await run('tabPalette.addToGroup', vscode.Uri.parse('webview-panel:webview-panel/webview-1'), { groupId: 1, editorIndex: index });
+      await settle(300);
+      assert.deepStrictEqual(prompts.shownPicks[0], ['New group', 'Remove from group']);
+      assert.deepStrictEqual(members(main), ['a.txt']);
+    });
+
+    test('a webview tab in another editor group moves to its group', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt']);
+      await openWebview('Graph', vscode.ViewColumn.Two);
+      await run('tabPalette.addToNewGroup', vscode.Uri.parse('webview-panel:x'), { editorIndex: 0 });
+      api.store.remove(api.store.groupOf(keyOf('Graph'))!.id);
+      answerPrompts({ pick: ['Main'] });
+      await run('tabPalette.addToGroup', vscode.Uri.parse(keyOf('Graph')));
+      await waitFor('Graph moved to the first editor group', () => tabBarOf(vscode.window.tabGroups.all[0]).includes('Graph'));
+      await settle(300);
+      assert.deepStrictEqual(tabBarOf(vscode.window.tabGroups.all[0]).slice(0, 2), ['a.txt', 'Graph']);
+      assert.deepStrictEqual(members(main), ['a.txt', 'Graph']);
+      await run('workbench.action.joinAllGroups');
+    });
+
+    test('collapsing hides it with its group; reopening a closed group skips it (it cannot be opened again)', async () => {
+      await openWebview('Graph');
+      const main = api.store.create('Main', 'color2', [id('a.txt'), keyOf('Graph')]);
+      await api.layout.placeInGroup(group(main)!.uris);
+      await api.layout.collapse(main.id);
+      assert.notStrictEqual(activeTab(), 'Graph', 'the active tab left the collapsed group');
+      await run('tabPalette.closeGroup', main.id);
+      await waitFor('the group is closed', () => !isOpen('a.txt') && !tabBar().includes('Graph'));
+      await run('tabPalette.openGroup', main.id);
+      await waitFor('a.txt is open again', () => isOpen('a.txt'));
+      assert.deepStrictEqual(members(main), ['a.txt']);
+    });
+  });
+
   suite('pinned tabs (never in a group, like Chrome)', () => {
-    const isPinned = (name: string) => vscode.window.tabGroups.activeTabGroup.tabs.some((t) => t.isPinned && nameOf(tabUri(t)?.toString() ?? '') === name);
+    const isPinned = (name: string) => vscode.window.tabGroups.activeTabGroup.tabs.some((t) => t.isPinned && nameOf(tabUri(t).toString()) === name);
 
     teardown(async () => {
       for (const name of ['a.txt', 'b.txt', 'c.txt', 'd.txt']) {
@@ -468,7 +541,7 @@ suite('TabPalette in a real VS Code window', () => {
       assert.strictEqual(group(work)!.collapsed, true);
       assert.strictEqual(group(main)!.collapsed, true, 'the other group stays collapsed');
       const active = vscode.window.tabGroups.activeTabGroup.activeTab!;
-      const uri = tabUri(active)!;
+      const uri = tabUri(active);
       assert.strictEqual(uri.scheme, 'untitled', 'a new empty file is shown');
       assert.strictEqual(vscode.window.activeTextEditor?.document.getText(), '');
       assert.strictEqual(api.store.groupOf(uri.toString()), undefined, 'the new file is in no group');
@@ -988,6 +1061,38 @@ suite('TabPalette in a real VS Code window', () => {
       ui!.close();
       await waitFor('the selection is dropped with the tab bar', () => !api.sidebar.state().selectionSync);
       assert.ok(api.sidebar.state().rows[0].tabs.every((t) => !t.selected));
+    });
+
+    test('the side bar shows the icons the tab bar reports for tabs that show no file (Git Graph, Claude Code…)', async () => {
+      const panel = vscode.window.createWebviewPanel('tabPalette.test', 'Graph', vscode.ViewColumn.Active);
+      await waitFor('the Graph tab is open', () => tabBar().includes('Graph'));
+      const state = await connectAsTabBar();
+      const tabs = state.rows[0].tabs as { label: string; other?: boolean }[];
+      assert.deepStrictEqual(tabs.filter((t) => t.other).map((t) => t.label), ['Graph'], 'the tab bar is told which tabs show no file');
+      const at = tabBar().indexOf('Graph');
+      const png = 'data:image/png;base64,iVBORw0KGgo=';
+      const icons: (string | null)[] = tabBar().map((_, i) => (i === at ? png : null));
+      icons[0] = 'javascript:alert(1)'; // not a picture: ignored
+      ui!.send(JSON.stringify({ type: 'tabIcons', rows: [{ row: 0, icons }] }));
+      await waitFor('the side bar shows the icon', () => !!api.sidebar.state().rows[0].tabs[at].icon);
+      const shown = api.sidebar.state().rows[0].tabs;
+      assert.deepStrictEqual(shown[at].icon, { src: png });
+      assert.ok(!shown[0].icon || !('src' in shown[0].icon) || shown[0].icon.src !== icons[0]);
+
+      // A symbol of VS Code's icon font (Settings, Extension pages…): drawn with that font.
+      const symbols: unknown[] = tabBar().map((_, i) => (i === at ? { codicon: '' } : null));
+      symbols[0] = { codicon: 'too long' }; // not one symbol: ignored
+      ui!.send(JSON.stringify({ type: 'tabIcons', rows: [{ row: 0, icons: symbols }] }));
+      await waitFor('the side bar shows the symbol', () => {
+        const icon = api.sidebar.state().rows[0].tabs[at].icon;
+        return !!icon && 'char' in icon;
+      });
+      const withSymbol = api.sidebar.state();
+      assert.deepStrictEqual(withSymbol.rows[0].tabs[at].icon, { char: '', font: 'tabpalette-codicon' });
+      assert.ok(withSymbol.fonts.some((f) => f.family === 'tabpalette-codicon' && f.src.includes('codicon.ttf')), "VS Code's icon font is loaded");
+      ui!.close();
+      await waitFor('the icon is dropped with the tab bar', () => !api.sidebar.state().rows[0].tabs[at].icon);
+      panel.dispose();
     });
 
     test('a Ctrl+click in the side bar selects the tab in the tab bar', async () => {

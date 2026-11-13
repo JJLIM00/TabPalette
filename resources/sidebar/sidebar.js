@@ -380,21 +380,20 @@
     item.dataset.row = String(row.index);
     item.dataset.index = String(index);
     item.dataset.focusKey = 'tab:' + row.index + ':' + tab.key;
-    const isFile = !tab.key.startsWith('#');
     // Right-click on one of several selected tabs: the menu acts on all of them.
-    const many = selected ? selectedTabs(row).filter((t) => !t.key.startsWith('#')) : [];
+    const many = selected ? selectedTabs(row) : [];
     item.dataset.vscodeContext = JSON.stringify(
       many.length > 1
         ? { webviewSection: 'selectedTabs', uris: many.map((t) => t.key), preventDefaultContextMenuItems: true }
         : {
-            webviewSection: !isFile ? 'otherTab' : tab.groupId ? 'groupedTab' : 'tab',
-            uri: isFile ? tab.key : undefined,
+            webviewSection: tab.groupId ? 'groupedTab' : 'tab',
+            uri: tab.key,
             // For the Open Editors items: which tab, and what they depend on.
             row: row.index,
             index: index,
             key: tab.key,
             tabDirty: tab.dirty,
-            tabScheme: isFile ? tab.key.slice(0, tab.key.indexOf(':')) : undefined,
+            tabScheme: tab.key.slice(0, tab.key.indexOf(':')),
             preventDefaultContextMenuItems: true,
           },
     );
@@ -693,7 +692,7 @@
     }
     item.classList.add(target.after ? 'drop-after' : 'drop-before');
     // The drop line shows what happens: the group's color to join it, red to leave a group.
-    const joins = drag.kind === 'tabs' && drag.tabs.some((t) => !t.key.startsWith('#')) ? tab.groupId : undefined;
+    const joins = drag.kind === 'tabs' ? tab.groupId : undefined;
     const group = joins && state.groups.find((g) => g.id === joins);
     const leaves = !joins && leavesGroup(row, drag);
     item.style.setProperty(

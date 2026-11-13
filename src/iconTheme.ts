@@ -5,6 +5,11 @@ import * as vscode from 'vscode';
 /** A tab's file icon, as the side bar draws it: a picture, or a character of an icon font. */
 export type FileIcon = { src: string } | { char: string; font: string; color?: string; size?: string };
 
+/** Where VS Code keeps its icon font (codicon.ttf). */
+const CODICON_FOLDER = () => vscode.Uri.joinPath(vscode.Uri.file(vscode.env.appRoot), 'out', 'media');
+/** The name the side bar gives VS Code's icon font (not "codicon", so no theme's font can clash). */
+const CODICON_FAMILY = 'tabpalette-codicon';
+
 /** An icon font the page loads (with the FontFace API, so no inline style is needed). */
 export interface IconFont {
   family: string;
@@ -72,7 +77,16 @@ export class FileIconTheme implements vscode.Disposable {
 
   /** Folders the page must be allowed to load icons from: every extension with a file icon theme. */
   static resourceRoots(): vscode.Uri[] {
-    return vscode.extensions.all.filter((e) => themesOf(e).length > 0).map((e) => e.extensionUri);
+    return [CODICON_FOLDER(), ...vscode.extensions.all.filter((e) => themesOf(e).length > 0).map((e) => e.extensionUri)];
+  }
+
+  /**
+   * A symbol of VS Code's own icon font (the icons of Settings, Extension pages…), drawn with
+   * that font, which VS Code ships in its app folder.
+   */
+  static codicon(char: string, webview: vscode.Webview): { icon: FileIcon; font: IconFont } {
+    const src = webview.asWebviewUri(vscode.Uri.joinPath(CODICON_FOLDER(), 'codicon.ttf'));
+    return { icon: { char, font: CODICON_FAMILY }, font: { family: CODICON_FAMILY, src: `url("${src}") format("truetype")` } };
   }
 
   private reload(): void {

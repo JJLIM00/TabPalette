@@ -2,7 +2,7 @@
   "name": "tabpalette",
   "displayName": "TabPalette - Tab Groups",
   "description": "Chrome-style tab groups on the VS Code tab bar: named, colored groups you can collapse, drag tabs into, and reorder.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "JJLIM00",
   "license": "MIT",
   "repository": {
@@ -416,7 +416,7 @@
         {
           "command": "tabPalette.tab.openToSide",
           "group": "2_open@1",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme != 'tabpalette-tab'"
         },
         {
           "command": "tabPalette.tab.revealInExplorer",
@@ -436,62 +436,62 @@
         {
           "command": "tabPalette.tab.copyPath",
           "group": "3_copy@1",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme != 'tabpalette-tab'"
         },
         {
           "command": "tabPalette.tab.copyRelativePath",
           "group": "3_copy@2",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme != 'tabpalette-tab'"
         },
         {
           "command": "tabPalette.tab.reopenWith",
           "group": "4_reopen@1",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme != 'tabpalette-tab'"
         },
         {
           "command": "tabPalette.tab.save",
           "group": "5_save@1",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme != 'tabpalette-tab'"
         },
         {
           "command": "tabPalette.tab.revert",
           "group": "5_save@2",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme != 'tabpalette-tab'"
         },
         {
           "command": "tabPalette.tab.compareWithSaved",
           "group": "6_compare@1",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme != 'tabpalette-tab'"
         },
         {
           "command": "tabPalette.tab.compareWithSelected",
           "group": "6_compare@2",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && resourceSelectedForCompare"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme != 'tabpalette-tab' && resourceSelectedForCompare"
         },
         {
           "command": "tabPalette.tab.selectForCompare",
           "group": "6_compare@3",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/ && tabScheme != 'tabpalette-tab'"
         },
         {
           "command": "tabPalette.tab.close",
           "group": "7_close@1",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab|otherTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
         },
         {
           "command": "tabPalette.tab.closeOthers",
           "group": "7_close@2",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab|otherTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
         },
         {
           "command": "tabPalette.tab.closeSaved",
           "group": "7_close@3",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab|otherTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
         },
         {
           "command": "tabPalette.tab.closeAll",
           "group": "7_close@4",
-          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab|otherTab)$/"
+          "when": "webviewId == 'tabPalette.sidebar' && webviewSection =~ /^(tab|groupedTab)$/"
         },
         {
           "command": "tabPalette.openGroup",

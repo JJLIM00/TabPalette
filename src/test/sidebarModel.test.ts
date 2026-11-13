@@ -3,8 +3,7 @@ import { DropTarget, groupDropIndex, moveItem, planTabDrop, planTabsDrop } from 
 
 /*
  * Tab rows are written as short pictures: 'x A1 A2 y'. Tabs starting with a capital letter
- * are in the group of that letter (A1 and A2 are in group A); lowercase tabs are in no group;
- * '#s' is a tab that is not a file (e.g. Settings).
+ * are in the group of that letter (A1 and A2 are in group A); lowercase tabs are in no group.
  */
 const row = (picture: string) => picture.split(' ');
 const groupOf = (tab: string) => (/^[A-Z]/.test(tab) ? tab[0] : undefined);
@@ -53,11 +52,6 @@ suite('Side bar drop rules', () => {
       assert.deepStrictEqual(drop(r, 'A3', on(r, 'A1')), { row: 'A3 A1 A2', group: 'A' });
     });
 
-    test('a tab that is not a file moves, but never joins a group', () => {
-      const r = '#s A1 A2';
-      assert.deepStrictEqual(drop(r, '#s', on(r, 'A2', true)), { row: 'A1 A2 #s', group: undefined });
-    });
-
     test('dropped where it already is: nothing changes', () => {
       const r = 'x A1 y';
       assert.strictEqual(drop(r, 'y', on(r, 'y')), 'nothing changes');
@@ -90,11 +84,6 @@ suite('Side bar drop rules', () => {
     test('all of a group’s tabs dragged together carry the group along', () => {
       const r = 'A1 A2 x y';
       assert.deepStrictEqual(dropAll(r, ['A1', 'A2'], { end: true }), { row: 'x y A1 A2', group: undefined, leaving: '' });
-    });
-
-    test('tabs that are not files move along but never join a group', () => {
-      const r = 'x #s A1';
-      assert.deepStrictEqual(dropAll(r, ['x', '#s'], on(r, 'A1', true)), { row: 'A1 x #s', group: 'A', leaving: '' });
     });
 
     test('dropped on one of the dragged tabs, or where they already are: nothing changes', () => {

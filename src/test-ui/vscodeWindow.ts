@@ -759,15 +759,20 @@ export class VSCodeWindow {
   }
 
   /** The file icon of a tab in the side bar: its font character and whether that font has loaded. */
-  async sidebarIcon(name: string): Promise<{ char: string; fontLoaded: boolean }> {
+  async sidebarIcon(name: string): Promise<{ char: string; fontLoaded: boolean; image: string }> {
     const frame = await this.sidebar();
     return frame
       .locator('.tab', { has: frame.locator('.label', { hasText: new RegExp(`^${escapeRegExp(name)}$`) }) })
       .locator('.icon')
       .evaluate(async (el) => {
         await document.fonts.ready;
-        const family = (el as HTMLElement).style.fontFamily;
-        return { char: el.textContent ?? '', fontLoaded: !!family && document.fonts.check('16px ' + family, el.textContent ?? '') };
+        const style = (el as HTMLElement).style;
+        const family = style.fontFamily;
+        return {
+          char: el.textContent ?? '',
+          fontLoaded: !!family && document.fonts.check('16px ' + family, el.textContent ?? ''),
+          image: style.backgroundImage,
+        };
       });
   }
 

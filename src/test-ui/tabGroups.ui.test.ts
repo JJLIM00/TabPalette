@@ -106,6 +106,24 @@ suite('TabPalette — used like a person would', function () {
       assert.strictEqual(await groupOf('d.txt'), 'Main');
     });
 
+    test('a tab that shows no file (Keyboard Shortcuts, Git Graph, Claude Code…) joins a group, and leaves it from the same menu', async () => {
+      await makeGroup('Main', ['a.txt']);
+      await vscode.setUserSetting('workbench.editor.useModal', 'off'); // open it as a tab, not in a dialog
+      try {
+        await vscode.runCommand('Preferences: Open Keyboard Shortcuts');
+        await vscode.waitUntil('the Keyboard Shortcuts tab is open', async () => (await vscode.tabNames()).includes('Keyboard Shortcuts'));
+        await addToGroup('Keyboard Shortcuts', 'Main');
+        assert.deepStrictEqual(await vscode.tabNames(), ['a.txt', 'Keyboard Shortcuts', 'b.txt', 'c.txt', 'd.txt']);
+        // The tab bar's menu cannot tell such a tab is grouped: its picker offers "Remove from group".
+        await vscode.tabMenu('Keyboard Shortcuts', 'Add Tab to Group…');
+        await vscode.pickFromList('Remove from group');
+        await vscode.waitUntil('it left Main', async () => (await groupOf('Keyboard Shortcuts')) === null);
+        assert.strictEqual(await groupOf('a.txt'), 'Main');
+      } finally {
+        await vscode.setUserSetting('workbench.editor.useModal', undefined);
+      }
+    });
+
     test('a tab moved to another group leaves its old group', async () => {
       await makeGroup('Main', ['a.txt', 'b.txt']);
       await makeGroup('Work', ['d.txt']);
@@ -751,6 +769,38 @@ suite('TabPalette — used like a person would', function () {
         const icon = await vscode.sidebarIcon(name);
         assert.strictEqual(icon.char, await vscode.tabBarIcon(name), `${name}: same icon as the tab bar`);
         assert.ok(icon.fontLoaded, `${name}: the icon font has loaded`);
+      }
+    });
+
+    test('a tab that shows no file shows the icon the tab bar shows (Markdown preview, like Git Graph or Claude Code)', async () => {
+      const file = path.join(__dirname, '..', '..', 'test-fixtures', 'notes.md');
+      fs.writeFileSync(file, '# Notes\n');
+      try {
+        await vscode.clickExplorerItem('notes.md'); // a new file: Quick Open may not list it yet
+        await vscode.waitUntil('notes.md is open', async () => (await vscode.tabs()).some((t) => t.name === 'notes.md' && t.active));
+        await vscode.runCommand('Markdown: Open Preview');
+        const name = 'Preview notes.md';
+        await vscode.waitUntil('the preview tab is open', async () => (await vscode.tabNames()).includes(name));
+        await vscode.openSidebar();
+        await vscode.waitUntil('the preview has its icon in the side bar', async () => (await vscode.sidebarIcon(name)).image.startsWith('url("data:image/'));
+      } finally {
+        await vscode.closeAllTabs();
+        fs.rmSync(file, { force: true });
+      }
+    });
+
+    test('Settings, Extension pages and Keyboard Shortcuts show their symbol, as in the tab bar', async () => {
+      await vscode.setUserSetting('workbench.editor.useModal', 'off'); // open it as a tab, not in a dialog
+      try {
+        await vscode.runCommand('Preferences: Open Keyboard Shortcuts');
+        const name = 'Keyboard Shortcuts';
+        await vscode.waitUntil('the Keyboard Shortcuts tab is open', async () => (await vscode.tabNames()).includes(name));
+        await vscode.openSidebar();
+        await vscode.waitUntil('it has its symbol in the side bar', async () => (await vscode.sidebarIcon(name)).fontLoaded);
+        assert.strictEqual((await vscode.sidebarIcon(name)).char, await vscode.tabBarIcon(name), 'the same symbol as the tab bar');
+      } finally {
+        await vscode.setUserSetting('workbench.editor.useModal', undefined);
+        await vscode.closeAllTabs();
       }
     });
 

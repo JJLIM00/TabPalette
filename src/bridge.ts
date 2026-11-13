@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { WebSocket, WebSocketServer } from 'ws';
 import { TabGroup } from './model';
 import { GroupStore } from './store';
-import { tabUri } from './tabs';
+import { isOtherTab, tabUri } from './tabs';
 
 /**
  * Connects this window's extension host to the workbench patch script running in
@@ -32,7 +32,23 @@ export interface UiAction {
 export interface UiState {
   type: 'state';
   groups: { id: string; name: string; color: string; collapsed: boolean }[];
-  rows: { tabs: { label: string; group: string | null }[] }[];
+  /** `other`: a tab that shows no file, whose icon the tab bar reports (see tabIcon). */
+  rows: { tabs: { label: string; group: string | null; other?: true }[] }[];
+}
+
+/** The biggest tab icon (characters of its data: URL) taken from the tab bar. */
+const MAX_ICON = 100_000;
+
+/** A tab's icon as the tab bar shows it: a picture (data: URL), or a symbol of VS Code's icon font. */
+export type TabBarIcon = { src: string } | { codicon: string };
+
+/** Checks an icon reported by the tab bar: a data: URL of a picture, or `{ codicon }` with one symbol. */
+function tabBarIcon(icon: unknown): TabBarIcon | null {
+  if (typeof icon === 'string') {
+    return icon.length <= MAX_ICON && /^data:image\/[\w.+-]+;base64,[\w+/=]+$/.test(icon) ? { src: icon } : null;
+  }
+  const codicon = (icon as { codicon?: unknown } | null)?.codicon;
+  return typeof codicon === 'string' && [...codicon].length === 1 ? { codicon } : null;
 }
 
 export function buildState(
@@ -48,8 +64,8 @@ export function buildState(
       .map((g) => ({ id: g.id, name: g.name, color: g.color, collapsed: g.collapsed })),
     rows: rows.map((row) => ({
       tabs: row.tabs.map((t) => {
-        const uri = tabUri(t)?.toString();
-        return { label: t.label, group: (uri && groupIn(row, uri)?.id) || null };
+        const key = tabUri(t);
+        return { label: t.label, group: groupIn(row, key.toString())?.id ?? null, ...(isOtherTab(key) ? { other: true as const } : {}) };
       }),
     })),
   };
@@ -66,9 +82,12 @@ export class Bridge implements vscode.Disposable {
   private tabSelection = new Map<number, number[]>();
   /** What each window's tab bar reported (each window shows its own tab rows). */
   private readonly selectionBy = new Map<WebSocket, Map<number, number[]>>();
-  private readonly selectionEmitter = new vscode.EventEmitter<void>();
-  /** The tab bar's selection changed (see selectedIndexes). */
-  readonly onDidChangeSelection = this.selectionEmitter.event;
+  /** The icons of the tabs that show no file, per tab row (by position in the row). */
+  private tabIcons = new Map<number, (TabBarIcon | null)[]>();
+  private readonly iconsBy = new Map<WebSocket, Map<number, (TabBarIcon | null)[]>>();
+  private readonly reportEmitter = new vscode.EventEmitter<void>();
+  /** The tab bar reported a new selection (see selectedIndexes) or new icons (see tabIcon). */
+  readonly onDidChangeReport = this.reportEmitter.event;
 
   constructor(
     private readonly store: GroupStore,
@@ -97,9 +116,9 @@ export class Bridge implements vscode.Disposable {
     const rows = this.rows();
     for (const [index, selected] of this.tabSelection) {
       const row = rows[index];
-      const uris = row ? row.tabs.map((t) => tabUri(t)?.toString()) : [];
+      const uris = row ? row.tabs.map((t) => tabUri(t).toString()) : [];
       if (uris.includes(anchor)) {
-        const chosen = selected.map((i) => uris[i]).filter((u): u is string => !!u);
+        const chosen = selected.map((i) => uris[i]).filter((u) => u !== undefined);
         return chosen.includes(anchor) ? chosen : [anchor];
       }
     }
@@ -109,7 +128,21 @@ export class Bridge implements vscode.Disposable {
   /** All windows' reports together, as one selection per tab row. */
   private mergeSelection(): void {
     this.tabSelection = new Map([...this.selectionBy.values()].flatMap((rows) => [...rows]));
-    this.selectionEmitter.fire();
+    this.reportEmitter.fire();
+  }
+
+  /** All windows' icon reports together. */
+  private mergeIcons(): void {
+    this.tabIcons = new Map([...this.iconsBy.values()].flatMap((rows) => [...rows]));
+    this.reportEmitter.fire();
+  }
+
+  /**
+   * The icon the tab bar shows for the tab at `index` of tab row `row` (only reported for
+   * tabs that show no file, like Git Graph, whose icon the extension API does not give).
+   */
+  tabIcon(row: number, index: number): TabBarIcon | undefined {
+    return this.tabIcons.get(row)?.[index] ?? undefined;
   }
 
   /** Positions of the tabs selected in the tab bar in tab row `row` (the active tab counts as selected). */
@@ -193,6 +226,19 @@ export class Bridge implements vscode.Disposable {
         this.mergeSelection();
         return;
       }
+      if (msg.type === 'tabIcons') {
+        const rows = Array.isArray(msg.rows) ? (msg.rows as { row?: unknown; icons?: unknown }[]) : [];
+        this.iconsBy.set(
+          socket,
+          new Map(
+            rows
+              .filter((r) => Number.isInteger(r?.row) && Array.isArray(r.icons))
+              .map((r) => [r.row as number, (r.icons as unknown[]).map(tabBarIcon)]),
+          ),
+        );
+        this.mergeIcons();
+        return;
+      }
       if (msg.type === 'action' && typeof msg.action === 'string' && typeof msg.groupId === 'string') {
         try {
           void Promise.resolve(this.onAction(msg as UiAction)).catch((err) => console.error('[TabPalette] action failed', err));
@@ -206,6 +252,9 @@ export class Bridge implements vscode.Disposable {
       this.clients.delete(socket);
       if (this.selectionBy.delete(socket)) {
         this.mergeSelection();
+      }
+      if (this.iconsBy.delete(socket)) {
+        this.mergeIcons();
       }
     });
     socket.on('error', () => socket.close());
@@ -262,7 +311,7 @@ export class Bridge implements vscode.Disposable {
       clearTimeout(this.timer);
     }
     this.subscriptions.forEach((d) => d.dispose());
-    this.selectionEmitter.dispose();
+    this.reportEmitter.dispose();
     this.item?.dispose();
     for (const client of this.clients) {
       client.close();

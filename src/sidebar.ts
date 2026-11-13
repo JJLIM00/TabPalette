@@ -8,7 +8,7 @@ import { order } from './membership';
 import { GroupColor } from './model';
 import { DropTarget, groupDropIndex, moveItem, planTabDrop, planTabsDrop } from './sidebarModel';
 import { GroupStore } from './store';
-import { tabUri } from './tabs';
+import { isOtherTab, tabUri } from './tabs';
 
 export const SIDEBAR_VIEW_ID = 'tabPalette.sidebar';
 
@@ -32,7 +32,7 @@ export interface SidebarRow {
 }
 
 export interface SidebarTab {
-  /** `Uri.toString()` for file tabs, `#<label>` for others (as in `order()`). */
+  /** The tab's key (as in `order()`): its file's URI, or a `tabpalette-tab:` URI for other tabs. */
   key: string;
   label: string;
   /** Folder, shown when two tabs in the row have the same name. */
@@ -47,7 +47,7 @@ export interface SidebarTab {
   /** Selected in the tab bar (Ctrl/Shift+click); the active tab counts as selected. */
   selected: boolean;
   groupId?: string;
-  /** The file icon theme's icon; none for tabs that aren't files, or with no icon theme. */
+  /** The file icon theme's icon; for tabs that aren't files, the picture the tab bar shows, if any. */
   icon?: FileIcon;
 }
 
@@ -141,6 +141,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     const webview = this.view?.webview;
     // The language picks the icon of files with no known name or extension (like Untitled-1).
     const languages = new Map(vscode.workspace.textDocuments.map((d) => [d.uri.toString(), d.languageId]));
+    // Tabs that show no file (Git Graph, Settings…): the icon the tab bar shows, as it reports it.
+    let codiconFont: IconFont | undefined;
+    const tabBarIcon = (row: number, index: number): FileIcon | undefined => {
+      const icon = selectionSync && webview ? bridge!.tabIcon(row, index) : undefined;
+      if (!icon || 'src' in icon) {
+        return icon;
+      }
+      const symbol = FileIconTheme.codicon(icon.codicon, webview!);
+      codiconFont = symbol.font;
+      return symbol.icon;
+    };
     const rows = all.map((row, index) => {
       const selected = new Set(selectionSync ? bridge!.selectedIndexes(index) : []);
       const keys = order(row);
@@ -155,20 +166,25 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         active: row === activeRow,
         tabs: row.tabs.map((tab, i) => {
           const uri = tabUri(tab);
+          const file = !isOtherTab(uri);
           const key = keys[i];
           const duplicate = named.get(tab.label)! > 1;
           return {
             key,
             label: tab.label,
-            description: uri && duplicate ? vscode.workspace.asRelativePath(path.dirname(uri.fsPath)) : undefined,
-            tooltip: uri ? (uri.scheme === 'file' ? uri.fsPath : uri.toString(true)) : tab.label,
+            description: file && duplicate ? vscode.workspace.asRelativePath(path.dirname(uri.fsPath)) : undefined,
+            tooltip: !file ? tab.label : uri.scheme === 'file' ? uri.fsPath : uri.toString(true),
             active: tab.isActive,
             dirty: tab.isDirty,
             pinned: tab.isPinned,
             preview: tab.isPreview,
             selected: selected.has(i),
-            groupId: uri ? groupOf(key) : undefined,
-            icon: uri && webview ? this.icons.iconFor(uri, languages.get(key), webview) : undefined,
+            groupId: groupOf(key),
+            icon: !webview
+              ? undefined
+              : file
+                ? this.icons.iconFor(uri, languages.get(key), webview)
+                : tabBarIcon(index, i),
           };
         }),
       };
@@ -181,7 +197,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
       closed: g.closed,
       count: g.uris.length,
     }));
-    return { rows, groups, selectionSync, fonts: webview ? this.icons.fonts(webview) : [] };
+    const fonts = webview ? this.icons.fonts(webview) : [];
+    return { rows, groups, selectionSync, fonts: codiconFont ? [...fonts, codiconFont] : fonts };
   }
 
   /** Handles a message from the page (public for the integration tests). */
@@ -312,15 +329,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
       return;
     }
     const dragged = from.map((i) => keys[i]);
-    const files = dragged.filter((k) => !k.startsWith('#'));
     if (plan.group) {
-      await this.layout.unpin(files); // Chrome: pinned tabs are never in a group
+      await this.layout.unpin(dragged); // Chrome: pinned tabs are never in a group
     }
     await this.layout.moveTabsTogether(rowIndex, dragged, plan.othersBefore);
     if (plan.group) {
       const last = plan.othersBefore + dragged.length - 1;
       const next = plan.order.slice(last + 1).find((k) => groupOf(k) === plan.group);
-      this.store.addUris(plan.group, files, next);
+      this.store.addUris(plan.group, dragged, next);
       this.store.setCollapsed(plan.group, false);
     }
     if (plan.leaving.length > 0) {

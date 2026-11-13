@@ -34,7 +34,7 @@ export function activate(context: vscode.ExtensionContext): TabGroupsApi {
     if (!bridge) {
       bridge = new Bridge(store, handleUiAction, undefined, (row, uri) => tracker.groupIn(row, uri));
       // The side bar shows the tab bar's selection.
-      bridge.onDidChangeSelection(() => sidebar.refresh());
+      bridge.onDidChangeReport(() => sidebar.refresh());
       await bridge.start();
     }
     return bridge;

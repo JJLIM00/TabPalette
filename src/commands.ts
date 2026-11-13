@@ -5,9 +5,10 @@ import { colorIconFactory } from './colorIcons';
 import { Layout } from './layout';
 import { GROUP_COLORS, GroupColor, TabGroup, colorLabel, displayName, isGroupColor } from './model';
 import { GroupStore } from './store';
-import { CloseGuard, activeTabUri, openFiles, openUris, selectedTabUris } from './tabs';
+import { CloseGuard, activeTabUri, menuTabUri, openFiles, openUris, selectedTabUris } from './tabs';
 
 const NEW_GROUP = '__new__';
+const REMOVE = '__remove__';
 
 export interface CommandDeps {
   store: GroupStore;
@@ -43,10 +44,17 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     return picked?.color;
   }
 
-  /** Chrome's "Add tab to group" submenu: New group first, then existing groups. */
+  /**
+   * Chrome's "Add tab to group" submenu: New group first, then existing groups. For a grouped
+   * tab (`exclude`), "Remove from group" too: the tab bar's menu shows "Add Tab to Group…" on a
+   * grouped tab that shows no file (like Git Graph), as it cannot tell that it is grouped.
+   */
   async function pickGroup(placeHolder: string, exclude?: string): Promise<string | undefined> {
     type GroupItem = vscode.QuickPickItem & { id: string };
     const items: GroupItem[] = [{ label: '$(add) New group', id: NEW_GROUP }];
+    if (exclude) {
+      items.push({ label: '$(close) Remove from group', id: REMOVE });
+    }
     const groups = store.all().filter((g) => g.id !== exclude && !g.closed);
     if (groups.length > 0) {
       items.push({ label: '', kind: vscode.QuickPickItemKind.Separator, id: '' });
@@ -107,7 +115,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
         return all;
       }
     }
-    const single = toString(arg) ?? activeTabUri()?.toString();
+    const single = (arg instanceof vscode.Uri ? menuTabUri(arg, multi)?.toString() : toString(arg)) ?? activeTabUri()?.toString();
     return single ? [single] : [];
   }
 
@@ -147,13 +155,14 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
 
   const noFiles = () => void vscode.window.showInformationMessage('Open a file to add it to a tab group.');
 
-  /** The selected tabs for a tab context-menu command (`arg` = the right-clicked tab). */
-  const selectedTabs = async (arg: unknown) => {
+  /** The selected tabs for a tab context-menu command (`arg`, `context` = the right-clicked tab). */
+  const selectedTabs = async (arg: unknown, context: unknown) => {
     const fromSidebar = sidebarArg(arg).uris; // the tabs selected in the side bar
     if (fromSidebar && fromSidebar.length > 0) {
       return fromSidebar;
     }
-    return selectedTabUris(arg instanceof vscode.Uri ? arg : undefined, (anchor) => deps.bridge()?.selectedUris(anchor));
+    const anchor = arg instanceof vscode.Uri ? menuTabUri(arg, context) : undefined;
+    return selectedTabUris(anchor, (key) => deps.bridge()?.selectedUris(key));
   };
 
   // ---------- group actions (shared by commands and the chip editor) ----------
@@ -204,10 +213,12 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
         return noFiles();
       }
       const current = uris.length === 1 ? store.groupOf(uris[0]) : undefined;
-      const id = store.all().some((g) => !g.closed && g.id !== current?.id)
+      const id = current || store.all().some((g) => !g.closed)
         ? await pickGroup(uris.length > 1 ? `Add ${uris.length} tabs to group` : 'Add tab to group', current?.id)
         : NEW_GROUP;
-      if (id === NEW_GROUP) {
+      if (id === REMOVE) {
+        await commands['tabPalette.removeFromGroup'](undefined, uris.map((u) => vscode.Uri.parse(u)));
+      } else if (id === NEW_GROUP) {
         await createGroup(uris, isSidebarArg(arg));
       } else if (id) {
         await addTo(id, uris);
@@ -232,16 +243,16 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
       }
       store.pruneEmpty();
     },
-    'tabPalette.addSelectedToGroup': async (arg) => {
-      const uris = await selectedTabs(arg);
+    'tabPalette.addSelectedToGroup': async (arg, context) => {
+      const uris = await selectedTabs(arg, context);
       return commands['tabPalette.addToGroup'](isSidebarArg(arg) ? arg : undefined, uris.map((u) => vscode.Uri.parse(u)));
     },
-    'tabPalette.addSelectedToNewGroup': async (arg) => {
-      const uris = await selectedTabs(arg);
+    'tabPalette.addSelectedToNewGroup': async (arg, context) => {
+      const uris = await selectedTabs(arg, context);
       return commands['tabPalette.addToNewGroup'](isSidebarArg(arg) ? arg : undefined, uris.map((u) => vscode.Uri.parse(u)));
     },
-    'tabPalette.removeSelectedFromGroup': async (arg) => {
-      const uris = await selectedTabs(arg);
+    'tabPalette.removeSelectedFromGroup': async (arg, context) => {
+      const uris = await selectedTabs(arg, context);
       return commands['tabPalette.removeFromGroup'](undefined, uris.map((u) => vscode.Uri.parse(u)));
     },
 

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { MembershipTracker, order } from './membership';
 import { TabGroup } from './model';
 import { GroupStore } from './store';
-import { CloseGuard, openFiles, tabUri } from './tabs';
+import { CloseGuard, isOtherTab, openFiles, tabUri } from './tabs';
 
 /** Tab-row operations that make groups behave like Chrome's. */
 export class Layout {
@@ -28,7 +28,7 @@ export class Layout {
       if (!row || !this.store.get(groupId)) {
         return joined;
       }
-      const tabs = row.tabs.map((t) => ({ label: t.label, uri: tabUri(t)?.toString() ?? '' }));
+      const tabs = row.tabs.map((t) => ({ label: t.label, uri: tabUri(t).toString() }));
       const member = (u: string) => this.store.groupOf(u)?.id === groupId;
       // Each joined tab can make the next one adjacent (several dropped side by side).
       for (let progress = true; progress && remaining.length > 0; ) {
@@ -64,7 +64,7 @@ export class Layout {
     if (!row || !this.store.get(groupId)) {
       return 0;
     }
-    const tabs = row.tabs.map((t) => ({ label: t.label, uri: tabUri(t)?.toString() ?? '' }));
+    const tabs = row.tabs.map((t) => ({ label: t.label, uri: tabUri(t).toString() }));
     const leaving = droppedOutOfGroup(tabs, labels, (u) => this.store.groupOf(u)?.id === groupId);
     if (leaving.length > 0) {
       this.store.removeUris(leaving);
@@ -115,7 +115,7 @@ export class Layout {
   async unpin(uris: string[]): Promise<void> {
     const wanted = new Set(uris);
     const pinned = vscode.window.tabGroups.all.flatMap((row) =>
-      row.tabs.filter((t) => t.isPinned && wanted.has(tabUri(t)?.toString() ?? '')).map((tab) => ({ row, tab })),
+      row.tabs.filter((t) => t.isPinned && wanted.has(tabUri(t).toString())).map((tab) => ({ row, tab })),
     );
     if (pinned.length === 0) {
       return;
@@ -123,12 +123,10 @@ export class Layout {
     const before = activeLocation();
     await this.tracker.suspend(async () => {
       for (const { row, tab } of pinned) {
-        await vscode.commands.executeCommand('vscode.open', tabUri(tab), { viewColumn: row.viewColumn, preview: false });
+        await this.showTab(row, tab);
         await vscode.commands.executeCommand('workbench.action.unpinEditor');
       }
-      if (before) {
-        await vscode.commands.executeCommand('vscode.open', before.uri, { viewColumn: before.viewColumn, preview: false });
-      }
+      await this.restore(before);
     });
   }
 
@@ -153,7 +151,7 @@ export class Layout {
     let movedAny = false;
     await this.tracker.suspend(async () => {
       movedAny = await this.bringHome(uris);
-      if (movedAny && before && !vscode.window.tabGroups.all.some((r) => r.viewColumn === before!.viewColumn && order(r).includes(before!.uri.toString()))) {
+      if (movedAny && before && !vscode.window.tabGroups.all.some((r) => r.viewColumn === before!.viewColumn && order(r).includes(before!.key))) {
         before = activeLocation(); // the active tab moved to its group's row: it stays active there
       }
       for (const uri of [...uris].sort((x, y) => position(x) - position(y))) {
@@ -190,54 +188,57 @@ export class Layout {
             }
           });
           inPlace.add(uri);
-          await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(uri), {
-            viewColumn: row.viewColumn,
-            preview: false,
-          });
+          await this.showTab(row, row.tabs[index]);
           await vscode.commands.executeCommand('moveActiveEditor', { to: 'position', by: 'tab', value: last + 2 });
           movedAny = true;
         }
       }
-      if (movedAny && before) {
-        await vscode.commands.executeCommand('vscode.open', before.uri, { viewColumn: before.viewColumn, preview: false });
+      if (movedAny) {
+        await this.restore(before);
       }
     });
   }
 
   /**
-   * After opening `uri` in tab row `kept`: closes its tab in the other rows (completing a move).
-   * VS Code reports the new tab a moment later, and only then are the tab objects current.
+   * Moves the tab `key` from another tab row into row `target` (any tab, not only files).
+   * VS Code reports the move a moment later; returns whether the tab is there now.
    */
-  private async closeElsewhere(uri: string, kept: vscode.TabGroup): Promise<void> {
-    if (!(await settled(() => order(kept).includes(uri)))) {
-      return; // it did not open there: keep the tab where it is
+  private async moveToRow(key: string, target: vscode.TabGroup): Promise<boolean> {
+    const from = vscode.window.tabGroups.all.find((r) => r !== target && order(r).includes(key));
+    if (!from) {
+      return false;
     }
-    const others = vscode.window.tabGroups.all.flatMap((r) => (r === kept ? [] : r.tabs)).filter((t) => tabUri(t)?.toString() === uri);
+    if (isOtherTab(key)) {
+      // A tab that shows no file cannot be opened elsewhere: move it. (`moveActiveEditor`
+      // counts only the main window's rows, by position, which is their view column.)
+      await this.showTab(from, from.tabs[order(from).indexOf(key)]);
+      await vscode.commands.executeCommand('moveActiveEditor', { to: 'position', by: 'group', value: target.viewColumn });
+      return !!(await settled(() => order(target).includes(key)));
+    }
+    // A file opens in the target row (in any window), then its old tab closes.
+    await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(key), { viewColumn: target.viewColumn, preview: false });
+    if (!(await settled(() => order(target).includes(key)))) {
+      return false; // it did not open there: keep the tab where it is
+    }
+    const others = vscode.window.tabGroups.all.flatMap((r) => (r === target ? [] : r.tabs)).filter((t) => tabUri(t).toString() === key);
     if (others.length > 0) {
       await vscode.window.tabGroups.close(others, true);
     }
+    return true;
   }
 
   /**
    * Moves tabs of `uris` that are open in another tab row than their group's home row into
-   * that row (opened there, then closed where they were). Returns whether any moved.
+   * that row. Returns whether any moved.
    */
   private async bringHome(uris: string[]): Promise<boolean> {
     let moved = false;
     for (const uri of uris) {
       const group = this.store.groupOf(uri);
       const home = group && this.tracker.homeOf(group.id);
-      if (!home || order(home).includes(uri)) {
-        continue;
+      if (home && !order(home).includes(uri) && (await this.moveToRow(uri, home))) {
+        moved = true;
       }
-      const from = vscode.window.tabGroups.all.find((r) => order(r).includes(uri));
-      const tab = from?.tabs[order(from).indexOf(uri)];
-      if (!tab) {
-        continue;
-      }
-      await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(uri), { viewColumn: home.viewColumn, preview: false });
-      await this.closeElsewhere(uri, home);
-      moved = true;
     }
     return moved;
   }
@@ -275,12 +276,12 @@ export class Layout {
         if (position === undefined) {
           continue;
         }
-        await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(uri), { viewColumn: row.viewColumn, preview: false });
+        await this.showTab(row, row.tabs[order(row).indexOf(uri)]);
         await vscode.commands.executeCommand('moveActiveEditor', { to: 'position', by: 'tab', value: position + 1 });
         moved = true;
       }
-      if (moved && before) {
-        await vscode.commands.executeCommand('vscode.open', before.uri, { viewColumn: before.viewColumn, preview: false });
+      if (moved) {
+        await this.restore(before);
       }
     });
   }
@@ -312,6 +313,15 @@ export class Layout {
     await vscode.commands.executeCommand('workbench.action.openEditorAtIndex', row.tabs.indexOf(tab));
   }
 
+  /** Makes the tab that was active (see activeLocation) active again, if it is still open there. */
+  private async restore(before: Location | undefined): Promise<void> {
+    const row = before && vscode.window.tabGroups.all.find((r) => r.viewColumn === before.viewColumn);
+    const index = row ? order(row).indexOf(before!.key) : -1;
+    if (row && index >= 0) {
+      await this.showTab(row, row.tabs[index]);
+    }
+  }
+
   /** Moves the tab at `from` in tab row `rowIndex` to index `to`, keeping the active tab. */
   async moveTab(rowIndex: number, from: number, to: number): Promise<void> {
     const row = vscode.window.tabGroups.all[rowIndex];
@@ -324,8 +334,8 @@ export class Layout {
     await this.tracker.suspend(async () => {
       await this.showTab(row, tab);
       await vscode.commands.executeCommand('moveActiveEditor', { to: 'position', by: 'tab', value: to + 1 });
-      if (before && !wasActive) {
-        await vscode.commands.executeCommand('vscode.open', before.uri, { viewColumn: before.viewColumn, preview: false });
+      if (!wasActive) {
+        await this.restore(before);
       }
     });
   }
@@ -367,9 +377,7 @@ export class Layout {
           }
         }
       }
-      if (before) {
-        await vscode.commands.executeCommand('vscode.open', before.uri, { viewColumn: before.viewColumn, preview: false });
-      }
+      await this.restore(before);
     });
   }
 
@@ -386,7 +394,7 @@ export class Layout {
     const created: string[] = [];
     await this.tracker.suspend(async () => {
       for (const row of vscode.window.tabGroups.all) {
-        const active = row.activeTab ? tabUri(row.activeTab)?.toString() : undefined;
+        const active = row.activeTab ? tabUri(row.activeTab).toString() : undefined;
         if (!active || !hidden(active)) {
           continue;
         }
@@ -436,9 +444,13 @@ export class Layout {
     if (!group) {
       return [];
     }
+    // A tab that shows no file (a webview, a terminal) cannot be opened again: it leaves the group.
+    this.store.removeUris(group.uris.filter((u) => isOtherTab(u)));
     this.store.setClosed(groupId, false);
     this.store.setCollapsed(groupId, false);
-    return this.tracker.suspend(() => openFiles(group.uris));
+    const uris = this.store.get(groupId)?.uris ?? [];
+    this.store.pruneEmpty();
+    return this.tracker.suspend(() => openFiles(uris));
   }
 
   /** Chrome "Move group to new window": move every open tab of the group into one new window. */
@@ -448,16 +460,16 @@ export class Layout {
       return;
     }
     const tabs = vscode.window.tabGroups.all.flatMap((row) =>
-      row.tabs.filter((t) => group.uris.includes(tabUri(t)?.toString() ?? '')).map((t) => ({ row, tab: t })),
+      row.tabs.filter((t) => group.uris.includes(tabUri(t).toString())).map((t) => ({ row, tab: t })),
     );
     if (tabs.length === 0) {
       return;
     }
-    const uris = tabs.map(({ tab }) => tabUri(tab)!.toString());
+    const uris = tabs.map(({ tab }) => tabUri(tab).toString());
     const rowsBefore = new Set(vscode.window.tabGroups.all);
     await this.tracker.suspend(async () => {
       const first = tabs[0];
-      await vscode.commands.executeCommand('vscode.open', tabUri(first.tab), { viewColumn: first.row.viewColumn, preview: false });
+      await this.showTab(first.row, first.tab);
       await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
       // VS Code reports the new window's tab row a moment later: wait for it, or the other
       // tabs would be opened (and then closed) in the row they are already in.
@@ -465,9 +477,10 @@ export class Layout {
       if (!target) {
         return;
       }
-      for (const uri of uris.slice(1)) {
-        await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(uri), { viewColumn: target.viewColumn, preview: false });
-        await this.closeElsewhere(uri, target);
+      // Only files can follow into another window (opened there); a tab that shows no file can
+      // only be moved by position among the main window's rows, so it stays.
+      for (const uri of uris.slice(1).filter((u) => !isOtherTab(u))) {
+        await this.moveToRow(uri, target);
       }
     });
     this.store.setCollapsed(groupId, false);
@@ -581,8 +594,13 @@ async function settled<T>(check: () => T | undefined | false): Promise<T | undef
   return undefined;
 }
 
-function activeLocation(): { uri: vscode.Uri; viewColumn: vscode.ViewColumn } | undefined {
+interface Location {
+  key: string;
+  viewColumn: vscode.ViewColumn;
+}
+
+/** The active tab: its key and its row. */
+function activeLocation(): Location | undefined {
   const row = vscode.window.tabGroups.activeTabGroup;
-  const uri = row.activeTab ? tabUri(row.activeTab) : undefined;
-  return uri ? { uri, viewColumn: row.viewColumn } : undefined;
+  return row.activeTab ? { key: tabUri(row.activeTab).toString(), viewColumn: row.viewColumn } : undefined;
 }

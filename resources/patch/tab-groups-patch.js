@@ -265,6 +265,7 @@
 
     // ---------------------------------------------------------------- rendering
 
+    /** Draws the groups on every tab row; returns the tab rows (see domRows), for the reports. */
     function render() {
       P.renders++;
       var groups = {};
@@ -325,6 +326,7 @@
           setTimeout(schedule, 100);
         }
       }
+      return rows;
     }
 
     var pendingEdit = null;
@@ -590,13 +592,13 @@
      * from a tab's right-click menu act on it.
      */
     var lastSelection = '';
-    function reportTabSelection() {
+    function reportTabSelection(dom) {
       if (!ws || ws.readyState !== 1) {
         lastSelection = '';
         return;
       }
       var rows = [];
-      domRows().forEach(function (row) {
+      dom.forEach(function (row) {
         var at = row.containers[0].dataset.tgRow;
         if (at === undefined) {
           return;
@@ -613,6 +615,78 @@
       if (sig !== lastSelection) {
         lastSelection = sig;
         ws.send(JSON.stringify({ type: 'tabSelection', rows: rows }));
+      }
+    }
+
+    /**
+     * Reports the icons of the tabs that show no file (marked `other` in the state): the
+     * extension cannot read them, and the side bar shows them. VS Code draws them as a picture
+     * (webviews like Git Graph or Claude Code bring their own), sent as a data: URL as the side
+     * bar cannot load the workbench's files (each picture is read once), or as a symbol of its
+     * icon font (Settings, Extension pages, Keyboard Shortcuts), sent as `{ codicon: char }`.
+     */
+    var iconData = {}; // picture URL -> data: URL ('' while it loads, or when it can't be read)
+    var lastIcons = '';
+    var MAX_ICON = 100000; // characters of a data: URL; a bigger picture is not sent
+    function tabIcon(tab) {
+      // An editor's own picture is in .monaco-icon-label-iconpath; a symbol (and, in older
+      // versions, a picture) is on the label's ::before.
+      var path = tab.querySelector('.monaco-icon-label-iconpath');
+      var label = tab.querySelector('.monaco-icon-label');
+      var before = !path && label ? getComputedStyle(label, '::before') : null;
+      var image = path ? path.style.backgroundImage : before ? before.backgroundImage : '';
+      var match = /^url\("?(.*?)"?\)$/.exec(image || '');
+      if (match) {
+        if (!(match[1] in iconData)) {
+          loadIcon(match[1]);
+        }
+        return iconData[match[1]] || null;
+      }
+      var symbol = before && /codicon/.test(before.fontFamily) ? /^"(.{1,2})"$/.exec(before.content) : null;
+      return symbol ? { codicon: symbol[1] } : null;
+    }
+    function loadIcon(url) {
+      iconData[url] = '';
+      fetch(url)
+        .then(function (response) {
+          return response.ok ? response.blob() : null;
+        })
+        .then(function (blob) {
+          if (!blob || !/^image\//.test(blob.type)) {
+            return;
+          }
+          var reader = new FileReader();
+          reader.onload = function () {
+            if (typeof reader.result === 'string' && reader.result.length <= MAX_ICON) {
+              iconData[url] = reader.result;
+              schedule();
+            }
+          };
+          reader.readAsDataURL(blob);
+        })
+        .catch(function () {});
+    }
+    function reportTabIcons(dom) {
+      if (!ws || ws.readyState !== 1) {
+        lastIcons = '';
+        return;
+      }
+      var rows = [];
+      dom.forEach(function (row) {
+        var at = row.containers[0].dataset.tgRow;
+        var known = state && state.rows[+at];
+        if (at === undefined || !known) {
+          return;
+        }
+        var icons = row.tabs.map(function (t, i) {
+          return known.tabs[i] && known.tabs[i].other ? tabIcon(t) : null;
+        });
+        rows.push({ row: +at, icons: icons });
+      });
+      var sig = JSON.stringify(rows);
+      if (sig !== lastIcons) {
+        lastIcons = sig;
+        ws.send(JSON.stringify({ type: 'tabIcons', rows: rows }));
       }
     }
 
@@ -1032,8 +1106,9 @@
       requestAnimationFrame(function () {
         pending = false;
         try {
-          render();
-          reportTabSelection();
+          var rows = render();
+          reportTabSelection(rows);
+          reportTabIcons(rows);
         } catch (err) {
           console.error('[TabPalette]', err);
         }
