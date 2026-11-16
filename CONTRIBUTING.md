@@ -18,6 +18,30 @@ pnpm run vsix       # build a .vsix
 
 Press **F5** to start an Extension Development Host with the `test-fixtures` folder open. That window runs your installed VS Code, so **Enable** there patches your real installation. Run **Disable** to undo it.
 
+## Adding a language
+
+All text is in English, and VS Code shows a translation when one exists for its display language. To add a language, add two files, using VS Code's language id (such as `zh-cn`, `ja` or `de`). No code changes are needed.
+
+| Copy | To | What it holds |
+|---|---|---|
+| `package.nls.json` | `package.nls.<language>.json` | Command names, menus, the side bar title and the setting descriptions |
+| `l10n/bundle.l10n.json` | `l10n/bundle.l10n.<language>.json` | Everything else: messages, pickers, the group editor and the side bar |
+
+In each copy, translate the values and keep the keys. Keep `{0}` and `{1}`: they are filled in, for example with a group's name. A text left out stays in English.
+
+Each text has a key named after where it shows, such as `"group.rename": "Rename group"` or `"sidebar.closedGroups": "Closed groups"`. To change a word, change it in `l10n/bundle.l10n.json` only.
+
+To add a text, add its key and English text to `l10n/bundle.l10n.json`, then use it:
+- in `src/`: `t('group.rename')` from `src/text.ts`, with values for `{0}`, `{1}` after the key: `t('group.newTabIn', name)`;
+- in the tab bar script and the side bar page: `tx('group.rename')`. They get every text from the extension.
+
+`pnpm run check-l10n` runs before the tests. It fails when:
+- a key in the code has no English text;
+- an English text is not used;
+- a translation has an unknown key, or drops a `{0}`.
+
+It checks `package.json`'s `%key%`s against `package.nls.json` the same way.
+
 ## Continuous integration
 
 Every push to `master` and every pull request runs [CI](.github/workflows/ci.yml): type-check, lint, bundle, the unit and integration tests, and packaging, on Windows, Linux and macOS. The UI tests don't run there; run them locally before a release.

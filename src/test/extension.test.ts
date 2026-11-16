@@ -10,7 +10,8 @@ import * as vscode from 'vscode';
 import { WebSocket } from 'ws';
 import { BRIDGE_LABEL_PREFIX, WORKBENCH_ORIGIN } from '../bridge';
 import type { TabGroupsApi } from '../extension';
-import { GroupColor, TabGroup } from '../model';
+import { GROUP_COLORS, GroupColor, TabGroup } from '../model';
+import { DEFAULT_SETTINGS, SETTINGS_SECTION, Settings } from '../settings';
 import { matchCopiedPaths, openUris, selectedTabUris, tabUri } from '../tabs';
 
 // ---------------------------------------------------------------- helpers
@@ -64,6 +65,21 @@ async function dragActiveTabTo(position: number): Promise<void> {
 
 function run(command: string, ...args: unknown[]): Thenable<unknown> {
   return vscode.commands.executeCommand(command, ...args);
+}
+
+/** The settings these tests change (in the test instance's own user settings). */
+const TEST_SETTINGS = ['tabBar.activeTabOutline', 'tabBar.chipMaxWidth', 'ungroupDropLineColor', ...GROUP_COLORS.map((c) => `groupColors.${c}`)];
+
+async function setSettings(values: Record<string, unknown>): Promise<void> {
+  const config = vscode.workspace.getConfiguration(SETTINGS_SECTION);
+  for (const [key, value] of Object.entries(values)) {
+    await config.update(key, value, vscode.ConfigurationTarget.Global);
+  }
+}
+
+async function resetSettings(): Promise<void> {
+  await setSettings(Object.fromEntries(TEST_SETTINGS.map((key) => [key, undefined])));
+  await waitFor('the settings are back to their defaults', () => JSON.stringify(api.settings.current) === JSON.stringify(DEFAULT_SETTINGS));
 }
 
 async function settle(ms = 150): Promise<void> {
@@ -685,6 +701,22 @@ suite('TabPalette in a real VS Code window', () => {
       assert.deepStrictEqual(groups.map((g) => [g.name, g.color, g.count]), [['Main', 'color5', 2]]);
     });
 
+    test('draws the group colors set in the settings; the others keep their theme color', async () => {
+      const shown = vscode.workspace.getConfiguration(SETTINGS_SECTION).get('groupColors.color2');
+      assert.strictEqual(shown, '#8AB4F8', 'Settings shows the default color in the field');
+      assert.deepStrictEqual(api.settings.current.colors, {}, 'a default the user left as it is keeps the theme color');
+      try {
+        await setSettings({ 'groupColors.color3': '#ABCDEF', 'groupColors.color4': 'not a color' });
+        await waitFor('the settings are read', () => api.settings.current.colors.color3 === '#ABCDEF');
+        assert.deepStrictEqual(api.sidebar.state().colors, { color3: '#ABCDEF' });
+        await setSettings({ ungroupDropLineColor: '#00ff00' });
+        await waitFor('the drop line color reaches the side bar', () => api.sidebar.state().ungroupDropLine === '#00ff00');
+      } finally {
+        await resetSettings();
+      }
+      assert.deepStrictEqual(api.sidebar.state().colors, {});
+    });
+
     test('a click opens the tab; the close button closes it', async () => {
       await sidebar({ type: 'activate', ...tabRef('b.txt') });
       await waitFor('b.txt is active', () => activeTab() === 'b.txt');
@@ -895,6 +927,35 @@ suite('TabPalette in a real VS Code window', () => {
       const update = nextMessage(ui!, 'state');
       api.store.rename(g.id, 'Work');
       assert.strictEqual(((await update) as unknown as State).groups[0].name, 'Work');
+    });
+
+    test("sends the tab bar's text (in VS Code's language) before the first state", async () => {
+      ui = await connect();
+      const first = new Promise<Message>((resolve) => ui!.once('message', (data: Buffer) => resolve(JSON.parse(data.toString()) as Message)));
+      ui.send(JSON.stringify({ type: 'hello', token }));
+      const msg = await first;
+      assert.strictEqual(msg.type, 'text');
+      assert.strictEqual((msg.text as Record<string, string>)['editor.close'], 'Close group');
+    });
+
+    test('sends the settings with the state, and a fresh state when a setting changes', async () => {
+      makeGroup('Main', 'color2', ['a.txt']);
+      const first = (await connectAsTabBar()) as unknown as { settings: Settings };
+      assert.deepStrictEqual(first.settings, DEFAULT_SETTINGS);
+      let last = first.settings;
+      ui!.on('message', (data: Buffer) => {
+        const msg = JSON.parse(data.toString()) as Message;
+        if (msg.type === 'state') {
+          last = msg.settings as Settings;
+        }
+      });
+      try {
+        await setSettings({ 'tabBar.activeTabOutline': false, 'tabBar.chipMaxWidth': 90, 'groupColors.color2': '#123456', ungroupDropLineColor: '#00ff00' });
+        const wanted = { activeTabOutline: false, chipMaxWidth: 90, colors: { color2: '#123456' }, ungroupDropLine: '#00ff00' };
+        await waitFor('the new settings reach the tab bar', () => JSON.stringify(last) === JSON.stringify(wanted));
+      } finally {
+        await resetSettings();
+      }
     });
 
     test('closed groups are not drawn on the tab bar', async () => {

@@ -78,6 +78,16 @@
 
     var ws = null;
     var state = null;
+    /** The text to show, in VS Code's language (see pageText in text.ts); sent before the first state. */
+    var text = {};
+
+    /** The text `key`, with {0}, {1} filled in from the other arguments. */
+    function tx(key) {
+      var args = arguments;
+      return String(text[key] || '').replace(/\{(\d)\}/g, function (m, i) {
+        return args[+i + 1] !== undefined ? String(args[+i + 1]) : m;
+      });
+    }
 
     function findBridge() {
       // The hidden status bar item is in the main window.
@@ -111,9 +121,12 @@
         } catch (err) {
           return;
         }
-        if (msg && msg.type === 'state') {
+        if (msg && msg.type === 'text' && msg.text && typeof msg.text === 'object') {
+          text = msg.text;
+        } else if (msg && msg.type === 'state') {
           state = msg;
           P.state = msg;
+          applySettings(msg.settings);
           schedule();
         } else if (msg && msg.type === 'edit') {
           pendingEdit = { gid: msg.groupId, tries: 0 };
@@ -128,6 +141,7 @@
           ws = null;
           state = null;
           P.state = null;
+          applySettings(null);
           schedule();
           // The extension host may have restarted with a new port: re-read the bridge.
           setTimeout(connect, 1500);
@@ -175,6 +189,10 @@
 
     function parseColor(value) {
       value = (value || '').trim();
+      var short = /^#([0-9a-f]{3,4})$/i.exec(value);
+      if (short) {
+        value = '#' + short[1].replace(/./g, '$&$&');
+      }
       var m = /^#([0-9a-f]{6})/i.exec(value);
       if (m) {
         var n = parseInt(m[1], 16);
@@ -190,6 +208,36 @@
         return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
       });
       return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    }
+
+    // ---------------------------------------------------------------- settings
+
+    /** The user's settings (sent with every state, see settings.ts); the defaults while not connected. */
+    var DEFAULT_SETTINGS = { activeTabOutline: true, chipMaxWidth: 160, colors: {} };
+    var settings = DEFAULT_SETTINGS;
+    var appliedSettings = JSON.stringify(DEFAULT_SETTINGS);
+
+    /** Applies the settings that change how the groups are drawn, when they changed. */
+    function applySettings(next) {
+      settings = next && typeof next === 'object' ? next : DEFAULT_SETTINGS;
+      var key = JSON.stringify(settings);
+      if (key === appliedSettings) {
+        return;
+      }
+      appliedSettings = key;
+      toggle(document.body, 'tg-no-outline', settings.activeTabOutline === false);
+      var width = Number(settings.chipMaxWidth);
+      setVar(document.body, '--tg-chip-max', width > 0 ? width + 'px' : '');
+      var drop = settings.ungroupDropLine;
+      setVar(document.body, '--tg-ungroup', typeof drop === 'string' && /^#[0-9a-f]{3,8}$/i.test(drop) ? drop : '');
+      // The chips' text colors and widths depend on the colors and on the widest a chip gets.
+      themeChanged();
+    }
+
+    /** A color slot's color: the one set in the settings, else its theme color. */
+    function slotColor(c) {
+      var set = settings.colors && settings.colors[c];
+      return typeof set === 'string' && /^#[0-9a-f]{3,8}$/i.test(set) ? set : 'var(--vscode-tabPalette-' + c + ')';
     }
 
     /**
@@ -209,7 +257,8 @@
       var cs = getComputedStyle(root);
       var out = {};
       COLORS.forEach(function (c) {
-        var rgb = parseColor(cs.getPropertyValue('--vscode-tabPalette-' + c));
+        var color = slotColor(c);
+        var rgb = parseColor(color.charAt(0) === '#' ? color : cs.getPropertyValue('--vscode-tabPalette-' + c));
         out[c] = rgb && luminance(rgb) < 0.28 ? '#ffffff' : '#202124';
       });
       return out;
@@ -339,7 +388,7 @@
       toggle(tab, 'tg-last', last);
       toggle(tab, 'tg-collapsed', !!g && g.collapsed);
       toggle(tab, 'tg-head', first && g.collapsed);
-      setVar(tab, '--tg-color', g ? 'var(--vscode-tabPalette-' + g.color + ')' : '');
+      setVar(tab, '--tg-color', g ? slotColor(g.color) : '');
       if ((tab.dataset.tgGid || '') !== (g ? g.id : '')) {
         if (g) {
           tab.dataset.tgGid = g.id;
@@ -379,7 +428,7 @@
       }
       toggle(chip, 'tg-unnamed', !name);
       setVar(chip, '--tg-chip-fg', fg[g.color]);
-      chip.title = (name || 'Unnamed group') + (g.collapsed ? ' (collapsed)' : '') + ' (click to ' + (g.collapsed ? 'expand' : 'collapse') + ', drag to move, right-click to edit)';
+      chip.title = tx(g.collapsed ? 'chip.titleCollapsed' : 'chip.titleExpanded', name || tx('group.unnamed'));
       // Measuring forces a layout, so a chip is measured again only when its text or the theme
       // changed. A chip that is not on screen measures 0: try again on the next redraw.
       var measured = name + '|' + theme.generation;
@@ -888,7 +937,7 @@
       }
       var pop = el('div', 'tg-popup');
       pop.setAttribute('role', 'dialog');
-      pop.setAttribute('aria-label', 'Edit tab group');
+      pop.setAttribute('aria-label', tx('editor.label'));
       ['keydown', 'keyup', 'keypress', 'mousedown', 'pointerdown', 'contextmenu', 'wheel'].forEach(function (type) {
         pop.addEventListener(type, function (e) {
           e.stopPropagation();
@@ -901,7 +950,8 @@
       var input = el('input', 'tg-name');
       input.type = 'text';
       input.value = g.name || '';
-      input.placeholder = 'Name this group';
+      input.placeholder = tx('group.namePlaceholder');
+      input.setAttribute('aria-label', tx('group.name'));
       input.spellcheck = false;
       input.addEventListener('input', function () {
         clearTimeout(renameTimer);
@@ -923,9 +973,9 @@
       COLORS.forEach(function (c) {
         var b = el('button', 'tg-color');
         b.type = 'button';
-        b.title = 'Color ' + c.slice('color'.length);
+        b.title = tx('color.n', c.slice('color'.length));
         b.setAttribute('aria-label', b.title);
-        b.style.setProperty('--c', 'var(--vscode-tabPalette-' + c + ')');
+        b.style.setProperty('--c', slotColor(c));
         toggle(b, 'tg-selected', c === g.color);
         // A click must not move focus to the swatch: no focus ring, and typing keeps going to the name.
         b.addEventListener('mousedown', function (e) {
@@ -968,12 +1018,12 @@
         pop.appendChild(row);
       };
       pop.appendChild(el('div', 'tg-sep'));
-      item('add', 'New tab in group', 'newTab');
-      item('multiple-windows', 'Move group to new window', 'moveToNewWindow');
-      item('close-all', 'Close group', 'close', SHORTCUT_CLOSE);
+      item('add', tx('editor.newTab'), 'newTab');
+      item('multiple-windows', tx('editor.moveToNewWindow'), 'moveToNewWindow');
+      item('close-all', tx('editor.close'), 'close', SHORTCUT_CLOSE);
       pop.appendChild(el('div', 'tg-sep'));
-      item('ungroup-by-ref-type', 'Ungroup', 'ungroup');
-      item('trash', 'Delete group', 'delete');
+      item('ungroup-by-ref-type', tx('editor.ungroup'), 'ungroup');
+      item('trash', tx('editor.delete'), 'delete');
 
       (document.querySelector('.monaco-workbench') || document.body).appendChild(pop);
       var rect = anchor.getBoundingClientRect();
@@ -998,6 +1048,8 @@
     // ---------------------------------------------------------------- styles
 
     var T = '.monaco-workbench .part.editor .tabs-container > .tab';
+    /* The active-tab outline's rules apply only while the setting tabPalette.tabBar.activeTabOutline is on. */
+    var O = 'body:not(.tg-no-outline) ';
     var CSS = [
       /* hidden handshake item */
       '.statusbar-item[aria-label^="' + PREFIX + '"] { display: none !important; }',
@@ -1023,12 +1075,12 @@
         '.monaco-workbench .part.editor .tabs-container.tg-join > .tab.drop-target-right::before { background-color: var(--tg-join-color) !important; width: 3px !important; }',
       '.monaco-workbench .part.editor .tabs-container.tg-join > .tab.tg-first.tg-first.tg-join-start.drop-target-right::before { left: 0 !important; }',
       /* Releasing would take the dragged tab out of its group: the drop line shows the "ungroup"
-         theme color (tabPalette.ungroupDropLine, red by default; change it in workbench.colorCustomizations). */
+         color (the setting tabPalette.ungroupDropLineColor, else the theme color tabPalette.ungroupDropLine; red by default). */
       '.monaco-workbench .part.editor .tabs-container.tg-leave > .tab.drop-target-left::after, ' +
         '.monaco-workbench .part.editor .tabs-container.tg-leave > .tab.drop-target-right::before' +
-        ' { background-color: var(--vscode-tabPalette-ungroupDropLine, #F14C4C) !important; width: 3px !important; }',
+        ' { background-color: var(--tg-ungroup, var(--vscode-tabPalette-ungroupDropLine, #F14C4C)) !important; width: 3px !important; }',
       '.tg-chip { position: absolute; left: calc(-1 * (var(--tg-chip-w, 14px) + 6px)); top: 50%; transform: translateY(-50%); z-index: 12; box-sizing: border-box;' +
-        ' height: 20px; line-height: 20px; padding: 0 8px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' +
+        ' height: 20px; line-height: 20px; padding: 0 8px; max-width: var(--tg-chip-max, 160px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' +
         ' border-radius: 6px; background: var(--tg-color); color: var(--tg-chip-fg, #202124);' +
         ' font-size: 12px; font-weight: 600; cursor: pointer; user-select: none; -webkit-user-select: none; }',
       '.tg-chip.tg-unnamed { width: 14px; height: 14px; padding: 0; border-radius: 50%; }',
@@ -1051,15 +1103,15 @@
       '.tabs-container > .tab.tg-last > .tg-u::after { right: -2px; width: 2px; border-bottom-width: 0; border-radius: 0; }',
       /* VS Code's own active-tab background fills exactly the inside of the U (no dark margin
          outside it), and its own active-tab outline is hidden */
-      T + '.active.tg-member > .tab-fill, ' + T + '.active.tg-member.tg-member > .tab-fill { display: block !important; position: absolute !important;' +
+      O + T + '.active.tg-member > .tab-fill, ' + O + T + '.active.tg-member.tg-member > .tab-fill { display: block !important; position: absolute !important;' +
         ' inset: 3px 4px 0 4px !important; border: 0 !important; border-radius: 8px 8px 0 0 !important; box-shadow: none !important; clip-path: none !important; }',
-      T + '.active.tg-last.tg-member > .tab-fill { right: 6px !important; }',
-      T + '.active.tg-member > .tab-fill::before, ' + T + '.active.tg-member > .tab-fill::after, ' +
-        T + '.active.tg-member > .tab-connected-edge { display: none !important; }',
-      '.tabs-container > .tab.active.tg-member > .tg-u { display: block; }',
-      '.tabs-container > .tab.active.tg-member:not(.tg-first) > .tg-line { display: none; }',
+      O + T + '.active.tg-last.tg-member > .tab-fill { right: 6px !important; }',
+      O + T + '.active.tg-member > .tab-fill::before, ' + O + T + '.active.tg-member > .tab-fill::after, ' +
+        O + T + '.active.tg-member > .tab-connected-edge { display: none !important; }',
+      O + '.tabs-container > .tab.active.tg-member > .tg-u { display: block; }',
+      O + '.tabs-container > .tab.active.tg-member:not(.tg-first) > .tg-line { display: none; }',
       /* first tab active: the line stays only under the chip */
-      '.tabs-container > .tab.active.tg-first > .tg-line { right: 100%; border-radius: 2px; }',
+      O + '.tabs-container > .tab.active.tg-first > .tg-line { right: 100%; border-radius: 2px; }',
       '.tabs-container > .tab.tg-head > .tg-u { display: none !important; }',
 
       /* collapsed: only the chip remains */

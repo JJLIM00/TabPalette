@@ -2,6 +2,8 @@ import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { WebSocket, WebSocketServer } from 'ws';
 import { TabGroup } from './model';
+import { DEFAULT_SETTINGS, Settings } from './settings';
+import { pageText, t } from './text';
 import { GroupStore } from './store';
 import { isOtherTab, tabUri } from './tabs';
 
@@ -13,7 +15,7 @@ import { isOtherTab, tabUri } from './tabs';
  *   origin and clients that send the per-session secret token first.
  * - Handshake: port + token are published to *this window only* as the
  *   accessibility label of a hidden status bar item, which the patch reads from the DOM.
- * - Extension → UI: `state` (groups + each tab row's labels and group ids).
+ * - Extension → UI: `text` (the tab bar's text, in VS Code's language) once, then `state` (groups + each tab row's labels and group ids).
  * - UI → extension: `action` messages (collapse, rename, color, close, …), and
  *   `tabSelection` (the selected tabs of every tab row, sent whenever they change).
  * - Extension → UI, for the side bar: `click` (Ctrl/Shift+click a tab, to select it).
@@ -34,6 +36,8 @@ export interface UiState {
   groups: { id: string; name: string; color: string; collapsed: boolean }[];
   /** `other`: a tab that shows no file, whose icon the tab bar reports (see tabIcon). */
   rows: { tabs: { label: string; group: string | null; other?: true }[] }[];
+  /** How the tab bar draws the groups (the user's settings). */
+  settings: Settings;
 }
 
 /** The biggest tab icon (characters of its data: URL) taken from the tab bar. */
@@ -55,6 +59,7 @@ export function buildState(
   store: GroupStore,
   rows: readonly vscode.TabGroup[],
   groupIn: (row: vscode.TabGroup, uri: string) => TabGroup | undefined = (_, uri) => store.groupOf(uri),
+  settings: Settings = DEFAULT_SETTINGS,
 ): UiState {
   return {
     type: 'state',
@@ -68,6 +73,7 @@ export function buildState(
         return { label: t.label, group: groupIn(row, key.toString())?.id ?? null, ...(isOtherTab(key) ? { other: true as const } : {}) };
       }),
     })),
+    settings,
   };
 }
 
@@ -95,6 +101,8 @@ export class Bridge implements vscode.Disposable {
     private readonly rows: () => readonly vscode.TabGroup[] = () => vscode.window.tabGroups.all,
     /** A tab's group in its row (a group lives in one row); by default, its file's group. */
     private readonly groupIn?: (row: vscode.TabGroup, uri: string) => TabGroup | undefined,
+    /** The user's settings, sent with the state (call schedule() when they change). */
+    private readonly settings: () => Settings = () => DEFAULT_SETTINGS,
   ) {}
 
   get port(): number | undefined {
@@ -179,7 +187,7 @@ export class Bridge implements vscode.Disposable {
     );
 
     const item = vscode.window.createStatusBarItem('tabPalette.bridge', vscode.StatusBarAlignment.Right, -100000);
-    item.name = 'TabPalette (connection for group chips)';
+    item.name = t('statusBar.connection');
     // Must have text to be rendered; the patch CSS hides it.
     item.text = '$(layers)';
     item.accessibilityInformation = { label: `${BRIDGE_LABEL_PREFIX}${this.port}:${this.token}`, role: 'none' };
@@ -210,7 +218,8 @@ export class Bridge implements vscode.Disposable {
         authed = true;
         clearTimeout(timeout);
         this.clients.add(socket);
-        socket.send(JSON.stringify(buildState(this.store, this.rows(), this.groupIn)));
+        socket.send(JSON.stringify({ type: 'text', text: pageText() }));
+        socket.send(JSON.stringify(buildState(this.store, this.rows(), this.groupIn, this.settings())));
         return;
       }
       if (msg.type === 'tabSelection') {
@@ -289,7 +298,7 @@ export class Bridge implements vscode.Disposable {
     if (this.clients.size === 0) {
       return;
     }
-    const message = JSON.stringify(buildState(this.store, this.rows(), this.groupIn));
+    const message = JSON.stringify(buildState(this.store, this.rows(), this.groupIn, this.settings()));
     if (message !== this.lastState) {
       this.lastState = message;
       this.sendAll(message);

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { GroupColor, themeColorId } from './model';
+import { GroupColor, isHexColor, themeColorId } from './model';
+import type { Settings } from './settings';
 
 type Defaults = { dark: string; light: string; highContrast?: string; highContrastLight?: string };
 type ThemeKind = 'dark' | 'light' | 'highContrast' | 'highContrastLight';
@@ -20,7 +21,7 @@ export function resolveThemeColor(
   const themed = themeName ? customizations[`[${themeName}]`] : undefined;
   const candidates = [typeof themed === 'object' && themed ? (themed as Record<string, unknown>)[id] : undefined, customizations[id]];
   for (const value of candidates) {
-    if (typeof value === 'string' && /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) {
+    if (isHexColor(value)) {
       return value;
     }
   }
@@ -30,21 +31,24 @@ export function resolveThemeColor(
 /**
  * Colored dots for the Command Palette pickers. VS Code's quick pick ignores the color of a
  * ThemeIcon from an extension, so each dot is a small SVG image in the slot's current color
- * (following the user's color settings, see resolveThemeColor).
+ * (the slot's color from the settings, else its theme color, see resolveThemeColor).
  */
-export function colorIconFactory(ctx: vscode.ExtensionContext): (color: GroupColor) => vscode.Uri {
+export function colorIconFactory(ctx: vscode.ExtensionContext, settings: () => Settings): (color: GroupColor) => vscode.Uri {
   const contributed = (ctx.extension.packageJSON.contributes?.colors ?? []) as { id: string; defaults: Defaults }[];
-  return (color) => {
+  const themed = (color: GroupColor) => {
     const id = themeColorId(color);
     const defaults = contributed.find((c) => c.id === id)?.defaults ?? { dark: '#888888', light: '#888888' };
     const workbench = vscode.workspace.getConfiguration('workbench');
-    const hex = resolveThemeColor(
+    return resolveThemeColor(
       id,
       workbench.get<Record<string, unknown>>('colorCustomizations') ?? {},
       workbench.get<string>('colorTheme'),
       themeKind(vscode.window.activeColorTheme.kind),
       defaults,
     );
+  };
+  return (color) => {
+    const hex = settings().colors[color] ?? themed(color);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="${hex}"/></svg>`;
     return vscode.Uri.parse(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
   };

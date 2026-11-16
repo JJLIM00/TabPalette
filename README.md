@@ -8,14 +8,15 @@
 
 ## Features
 
-- **Group chips and lines.** Each group shows a colored chip with its name in front of its tabs, and a line in the group's color runs under them. The active tab in a group gets Chrome's rounded outline.
-- **Nine colors, your palette.** Chrome's grey, blue, red, yellow, green, pink, purple, cyan and orange by default, tuned for light and dark themes. Each of the nine can be changed in your settings (see [Custom colors](#custom-colors)).
+- **Group chips and lines.** Each group shows a colored chip with its name in front of its tabs, and a line in the group's color runs under them. The active tab in a group gets Chrome's rounded outline (you can turn it off in the [settings](#settings)).
+- **Nine colors, your palette.** Chrome's grey, blue, red, yellow, green, pink, purple, cyan and orange by default, tuned for light and dark themes. Each of the nine can be changed in the [settings](#settings).
 - **Collapse with a click.** Click a chip to hide the group's tabs, and click it again to bring them back.
 - **Edit in place.** Right-click a chip to rename the group, pick a color, open a new tab in it, move it to a new window, or close, ungroup or delete it.
 - **Drag and drop.** Drag tabs into a group, out of it, or between groups, and drag a chip to move the whole group. The drop line shows what will happen: the group's color when the tab will join, red when it will leave.
 - **Groups stay together.** A tab added to a group moves next to it. A tab removed from the middle of a group moves just past the group, so the group never splits.
 - **Saved per workspace.** Groups come back when you reopen the folder, including closed groups.
 - **Tab Groups side bar.** All open tabs listed top to bottom, like Chrome's vertical tabs, each group under a header in its color. See [The side bar](#the-side-bar).
+- **In your language.** English, Simplified Chinese (简体中文), Traditional Chinese (繁體中文) and Japanese (日本語), following VS Code's display language.
 
 ![Group editor](images/group-editor.png)
 
@@ -78,34 +79,18 @@ While you drag, the drop line shows what will happen: the group's color when the
 
 Every action is also in the Command Palette under **Tab Groups:**.
 
-## Custom colors
+## Settings
 
-The nine group colors are numbered slots, **Color 1** to **Color 9**. By default they are Chrome's colors, but you can set each slot to any color you like and make your own palette. Together with the red "ungroup" drop line, they are theme colors that you change in your settings:
+Open **Settings** and search for **TabPalette**. Changes apply at once, with no reload.
 
-```jsonc
-"workbench.colorCustomizations": {
-  "tabPalette.color1": "#9E9E9E",
-  "tabPalette.color2": "#4285F4",
-  "tabPalette.ungroupDropLine": "#FF9800"
-}
-```
-
-| Id | Default (Chrome color) | Used for |
+| Setting | Default | What it does |
 |---|---|---|
-| `tabPalette.color1` | grey | Color 1 |
-| `tabPalette.color2` | blue | Color 2 |
-| `tabPalette.color3` | red | Color 3 |
-| `tabPalette.color4` | yellow | Color 4 |
-| `tabPalette.color5` | green | Color 5 |
-| `tabPalette.color6` | pink | Color 6 |
-| `tabPalette.color7` | purple | Color 7 |
-| `tabPalette.color8` | cyan | Color 8 |
-| `tabPalette.color9` | orange | Color 9 |
-| `tabPalette.ungroupDropLine` | red | The drop line while dragging a tab, when releasing it would take the tab out of its group |
+| `tabPalette.tabBar.activeTabOutline` | `true` | Chrome's rounded outline, in the group color, around a group's active tab. When off, the active tab keeps VS Code's own style and the group line runs under it. |
+| `tabPalette.tabBar.chipMaxWidth` | `160` | The widest a group chip on the tab bar can get, in pixels (40 to 400). A longer name ends in "…". |
+| `tabPalette.groupColors.color1` … `color9` | Chrome's grey, blue, red, yellow, green, pink, purple, cyan and orange | The nine group colors, as hex colors. Each applies everywhere its groups show: the chip, the group line, the active tab's outline, the group editor, the side bar and the Command Palette pickers. New groups take the next unused color. |
+| `tabPalette.ungroupDropLineColor` | red | The drop line while dragging a tab, when releasing it would take the tab out of its group. |
 
-A group color applies everywhere the group shows: its chip, its group line, the active tab's outline, the swatch in the group editor, and the dots in the Command Palette pickers. New groups take the next unused slot, in order.
-
-You can also set colors for one theme only, e.g. `"[Default Dark Modern]": { "tabPalette.color3": "#E53935" }`.
+Each color field shows its default for dark themes. While you leave a color unchanged, light themes keep their own default.
 
 ## How it draws on the tab bar
 

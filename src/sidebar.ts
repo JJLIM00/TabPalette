@@ -6,6 +6,8 @@ import { FileIcon, FileIconTheme, IconFont } from './iconTheme';
 import { Layout } from './layout';
 import { order } from './membership';
 import { GroupColor } from './model';
+import { DEFAULT_SETTINGS, Settings } from './settings';
+import { pageText, t } from './text';
 import { DropTarget, groupDropIndex, moveItem, planTabDrop, planTabsDrop } from './sidebarModel';
 import { GroupStore } from './store';
 import { isOtherTab, tabUri } from './tabs';
@@ -23,6 +25,10 @@ export interface SidebarState {
   selectionSync: boolean;
   /** Fonts of the file icon theme, for icons drawn as font characters. */
   fonts: IconFont[];
+  /** Group colors set in the settings (hex), by slot; the others use their theme color. */
+  colors: Settings['colors'];
+  /** The drop line's color set in the settings, when a dropped tab would leave its group. */
+  ungroupDropLine?: string;
 }
 
 export interface SidebarRow {
@@ -96,6 +102,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     private readonly groupAction: (action: UiAction) => Promise<void>,
     /** The connection to the tab bar, while the patch is on. */
     private readonly bridge: () => Bridge | undefined = () => undefined,
+    /** The user's settings (call refresh() when they change). */
+    private readonly settings: () => Settings = () => DEFAULT_SETTINGS,
     private readonly icons: FileIconTheme = new FileIconTheme(),
   ) {
     this.subscriptions = [
@@ -198,7 +206,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
       count: g.uris.length,
     }));
     const fonts = webview ? this.icons.fonts(webview) : [];
-    return { rows, groups, selectionSync, fonts: codiconFont ? [...fonts, codiconFont] : fonts };
+    return { rows, groups, selectionSync, fonts: codiconFont ? [...fonts, codiconFont] : fonts, colors: this.settings().colors, ungroupDropLine: this.settings().ungroupDropLine };
   }
 
   /** Handles a message from the page (public for the integration tests). */
@@ -225,7 +233,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     const group = () => (typeof m.groupId === 'string' ? this.store.get(m.groupId) : undefined);
     switch (m.type) {
       case 'ready':
-        return this.post(true); // a page that just loaded has nothing to show yet
+        // A page that just loaded has nothing yet: its text (in VS Code's language), then the state.
+        void this.view?.webview.postMessage({ type: 'text', text: pageText() });
+        return this.post(true);
       case 'select': {
         const found = tabAt();
         const bridge = this.bridge();
@@ -403,20 +413,24 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     const css = webview.asWebviewUri(vscode.Uri.joinPath(media, 'sidebar.css'));
     const js = webview.asWebviewUri(vscode.Uri.joinPath(media, 'sidebar.js'));
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${vscode.env.language}">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="${css}">
-<title>Tab Groups</title>
+<title>${escapeHtml(t('sidebar.title'))}</title>
 </head>
 <body data-vscode-context='{"preventDefaultContextMenuItems":true}'>
-<div id="root" role="tree" aria-label="Open tabs and tab groups"></div>
+<div id="root" role="tree" aria-label="${escapeHtml(t('sidebar.label'))}"></div>
 <script nonce="${nonce}" src="${js}"></script>
 </body>
 </html>`;
   }
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
 function dropTarget(value: unknown): DropTarget | undefined {

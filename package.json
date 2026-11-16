@@ -1,8 +1,8 @@
 {
   "name": "tabpalette",
-  "displayName": "TabPalette - Tab Groups",
-  "description": "Chrome-style tab groups on the VS Code tab bar: named, colored groups you can collapse, drag tabs into, and reorder.",
-  "version": "0.2.2",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "0.3.0",
   "publisher": "JJLIM00",
   "license": "MIT",
   "repository": {
@@ -42,191 +42,191 @@
     "commands": [
       {
         "command": "tabPalette.addToGroup",
-        "title": "Add Tab to Group…",
-        "category": "Tab Groups"
+        "title": "%command.addToGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.addToNewGroup",
-        "title": "Add Tab to New Group",
-        "category": "Tab Groups"
+        "title": "%command.addToNewGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.removeFromGroup",
-        "title": "Remove Tab from Group",
-        "category": "Tab Groups"
+        "title": "%command.removeFromGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.moveToGroup",
-        "title": "Move Tab to Another Group…",
-        "category": "Tab Groups"
+        "title": "%command.moveToGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.addSelectedToGroup",
-        "title": "Add Selected Tabs to Group…",
-        "category": "Tab Groups"
+        "title": "%command.addSelectedToGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.addSelectedToNewGroup",
-        "title": "Add Selected Tabs to New Group",
-        "category": "Tab Groups"
+        "title": "%command.addSelectedToNewGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.removeSelectedFromGroup",
-        "title": "Remove Selected Tabs from Group",
-        "category": "Tab Groups"
+        "title": "%command.removeSelectedFromGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.editGroup",
-        "title": "Edit Group…",
-        "category": "Tab Groups"
+        "title": "%command.editGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.renameGroup",
-        "title": "Rename Group…",
-        "category": "Tab Groups"
+        "title": "%command.renameGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.changeColor",
-        "title": "Change Group Color…",
-        "category": "Tab Groups"
+        "title": "%command.changeColor%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.toggleCollapse",
-        "title": "Collapse / Expand Group",
-        "category": "Tab Groups"
+        "title": "%command.toggleCollapse%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.newTabInGroup",
-        "title": "New Tab in Group…",
-        "category": "Tab Groups"
+        "title": "%command.newTabInGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.moveGroupToNewWindow",
-        "title": "Move Group to New Window",
-        "category": "Tab Groups"
+        "title": "%command.moveGroupToNewWindow%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.closeGroup",
-        "title": "Close Group",
-        "category": "Tab Groups"
+        "title": "%command.closeGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.openGroup",
-        "title": "Reopen Closed Group…",
-        "category": "Tab Groups"
+        "title": "%command.openGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.ungroup",
-        "title": "Ungroup",
-        "category": "Tab Groups"
+        "title": "%command.ungroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.deleteGroup",
-        "title": "Delete Group",
-        "category": "Tab Groups"
+        "title": "%command.deleteGroup%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.showMenu",
-        "title": "Show Tab Groups",
-        "category": "Tab Groups"
+        "title": "%command.showMenu%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.enablePatch",
-        "title": "Enable Chrome-style Tab Groups (patches VS Code)",
-        "category": "Tab Groups"
+        "title": "%command.enablePatch%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.disablePatch",
-        "title": "Disable Chrome-style Tab Groups",
-        "category": "Tab Groups"
+        "title": "%command.disablePatch%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.reloadPatch",
-        "title": "Reload Tab Bar Script",
-        "category": "Tab Groups"
+        "title": "%command.reloadPatch%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.openToSide",
-        "title": "Open to the Side",
-        "category": "Tab Groups"
+        "title": "%command.tab.openToSide%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.revealInExplorer",
-        "title": "Reveal in File Explorer",
-        "category": "Tab Groups"
+        "title": "%command.tab.revealInExplorer%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.revealInFinder",
-        "title": "Reveal in Finder",
-        "category": "Tab Groups"
+        "title": "%command.tab.revealInFinder%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.openContainingFolder",
-        "title": "Open Containing Folder",
-        "category": "Tab Groups"
+        "title": "%command.tab.openContainingFolder%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.copyPath",
-        "title": "Copy Path",
-        "category": "Tab Groups"
+        "title": "%command.tab.copyPath%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.copyRelativePath",
-        "title": "Copy Relative Path",
-        "category": "Tab Groups"
+        "title": "%command.tab.copyRelativePath%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.reopenWith",
-        "title": "Reopen Editor With...",
-        "category": "Tab Groups"
+        "title": "%command.tab.reopenWith%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.save",
-        "title": "Save",
-        "category": "Tab Groups",
+        "title": "%command.tab.save%",
+        "category": "%category%",
         "enablement": "tabDirty"
       },
       {
         "command": "tabPalette.tab.revert",
-        "title": "Revert File",
-        "category": "Tab Groups",
+        "title": "%command.tab.revert%",
+        "category": "%category%",
         "enablement": "tabDirty"
       },
       {
         "command": "tabPalette.tab.compareWithSaved",
-        "title": "Compare with Saved",
-        "category": "Tab Groups",
+        "title": "%command.tab.compareWithSaved%",
+        "category": "%category%",
         "enablement": "tabDirty"
       },
       {
         "command": "tabPalette.tab.compareWithSelected",
-        "title": "Compare with Selected",
-        "category": "Tab Groups"
+        "title": "%command.tab.compareWithSelected%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.selectForCompare",
-        "title": "Select for Compare",
-        "category": "Tab Groups"
+        "title": "%command.tab.selectForCompare%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.close",
-        "title": "Close",
-        "category": "Tab Groups"
+        "title": "%command.tab.close%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.closeOthers",
-        "title": "Close Others",
-        "category": "Tab Groups"
+        "title": "%command.tab.closeOthers%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.closeSaved",
-        "title": "Close Saved",
-        "category": "Tab Groups"
+        "title": "%command.tab.closeSaved%",
+        "category": "%category%"
       },
       {
         "command": "tabPalette.tab.closeAll",
-        "title": "Close All",
-        "category": "Tab Groups"
+        "title": "%command.tab.closeAll%",
+        "category": "%category%"
       }
     ],
     "menus": {
@@ -531,7 +531,7 @@
     "colors": [
       {
         "id": "tabPalette.color1",
-        "description": "Tab group color 1 (chip, group line and active-tab outline). Default: Chrome grey.",
+        "description": "%color.color1%",
         "defaults": {
           "dark": "#DADCE0",
           "light": "#5F6368",
@@ -541,7 +541,7 @@
       },
       {
         "id": "tabPalette.color2",
-        "description": "Tab group color 2 (chip, group line and active-tab outline). Default: Chrome blue.",
+        "description": "%color.color2%",
         "defaults": {
           "dark": "#8AB4F8",
           "light": "#1A73E8",
@@ -551,7 +551,7 @@
       },
       {
         "id": "tabPalette.color3",
-        "description": "Tab group color 3 (chip, group line and active-tab outline). Default: Chrome red.",
+        "description": "%color.color3%",
         "defaults": {
           "dark": "#F28B82",
           "light": "#D93025",
@@ -561,7 +561,7 @@
       },
       {
         "id": "tabPalette.color4",
-        "description": "Tab group color 4 (chip, group line and active-tab outline). Default: Chrome yellow.",
+        "description": "%color.color4%",
         "defaults": {
           "dark": "#FDD663",
           "light": "#E37400",
@@ -571,7 +571,7 @@
       },
       {
         "id": "tabPalette.color5",
-        "description": "Tab group color 5 (chip, group line and active-tab outline). Default: Chrome green.",
+        "description": "%color.color5%",
         "defaults": {
           "dark": "#81C995",
           "light": "#1E8E3E",
@@ -581,7 +581,7 @@
       },
       {
         "id": "tabPalette.color6",
-        "description": "Tab group color 6 (chip, group line and active-tab outline). Default: Chrome pink.",
+        "description": "%color.color6%",
         "defaults": {
           "dark": "#FF8BCB",
           "light": "#D01884",
@@ -591,7 +591,7 @@
       },
       {
         "id": "tabPalette.color7",
-        "description": "Tab group color 7 (chip, group line and active-tab outline). Default: Chrome purple.",
+        "description": "%color.color7%",
         "defaults": {
           "dark": "#C58AF9",
           "light": "#9334E6",
@@ -601,7 +601,7 @@
       },
       {
         "id": "tabPalette.color8",
-        "description": "Tab group color 8 (chip, group line and active-tab outline). Default: Chrome cyan.",
+        "description": "%color.color8%",
         "defaults": {
           "dark": "#78D9EC",
           "light": "#007B83",
@@ -611,7 +611,7 @@
       },
       {
         "id": "tabPalette.color9",
-        "description": "Tab group color 9 (chip, group line and active-tab outline). Default: Chrome orange.",
+        "description": "%color.color9%",
         "defaults": {
           "dark": "#FCAD70",
           "light": "#C26401",
@@ -621,7 +621,7 @@
       },
       {
         "id": "tabPalette.ungroupDropLine",
-        "description": "Drop line shown while dragging a tab, when releasing it would take the tab out of its group.",
+        "description": "%color.ungroupDropLine%",
         "defaults": {
           "dark": "#F14C4C",
           "light": "#E51400",
@@ -630,17 +630,106 @@
         }
       }
     ],
+    "configuration": {
+      "title": "%configuration.title%",
+      "properties": {
+        "tabPalette.tabBar.activeTabOutline": {
+          "type": "boolean",
+          "default": true,
+          "order": 1,
+          "markdownDescription": "%setting.tabBar.activeTabOutline%"
+        },
+        "tabPalette.tabBar.chipMaxWidth": {
+          "type": "number",
+          "default": 160,
+          "minimum": 40,
+          "maximum": 400,
+          "order": 2,
+          "markdownDescription": "%setting.tabBar.chipMaxWidth%"
+        },
+        "tabPalette.groupColors.color1": {
+          "type": "string",
+          "default": "#DADCE0",
+          "format": "color-hex",
+          "order": 10,
+          "markdownDescription": "%setting.groupColors.color1%"
+        },
+        "tabPalette.groupColors.color2": {
+          "type": "string",
+          "default": "#8AB4F8",
+          "format": "color-hex",
+          "order": 11,
+          "markdownDescription": "%setting.groupColors.color2%"
+        },
+        "tabPalette.groupColors.color3": {
+          "type": "string",
+          "default": "#F28B82",
+          "format": "color-hex",
+          "order": 12,
+          "markdownDescription": "%setting.groupColors.color3%"
+        },
+        "tabPalette.groupColors.color4": {
+          "type": "string",
+          "default": "#FDD663",
+          "format": "color-hex",
+          "order": 13,
+          "markdownDescription": "%setting.groupColors.color4%"
+        },
+        "tabPalette.groupColors.color5": {
+          "type": "string",
+          "default": "#81C995",
+          "format": "color-hex",
+          "order": 14,
+          "markdownDescription": "%setting.groupColors.color5%"
+        },
+        "tabPalette.groupColors.color6": {
+          "type": "string",
+          "default": "#FF8BCB",
+          "format": "color-hex",
+          "order": 15,
+          "markdownDescription": "%setting.groupColors.color6%"
+        },
+        "tabPalette.groupColors.color7": {
+          "type": "string",
+          "default": "#C58AF9",
+          "format": "color-hex",
+          "order": 16,
+          "markdownDescription": "%setting.groupColors.color7%"
+        },
+        "tabPalette.groupColors.color8": {
+          "type": "string",
+          "default": "#78D9EC",
+          "format": "color-hex",
+          "order": 17,
+          "markdownDescription": "%setting.groupColors.color8%"
+        },
+        "tabPalette.groupColors.color9": {
+          "type": "string",
+          "default": "#FCAD70",
+          "format": "color-hex",
+          "order": 18,
+          "markdownDescription": "%setting.groupColors.color9%"
+        },
+        "tabPalette.ungroupDropLineColor": {
+          "type": "string",
+          "default": "#F14C4C",
+          "format": "color-hex",
+          "order": 19,
+          "markdownDescription": "%setting.ungroupDropLineColor%"
+        }
+      }
+    },
     "submenus": [
       {
         "id": "tabPalette.tabSubmenu",
-        "label": "Tab Group"
+        "label": "%submenu.tabSubmenu%"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "tabPalette",
-          "title": "Tab Groups",
+          "title": "%viewsContainer.tabGroups%",
           "icon": "resources/sidebar/tabs.svg"
         }
       ]
@@ -650,7 +739,7 @@
         {
           "type": "webview",
           "id": "tabPalette.sidebar",
-          "name": "Tabs"
+          "name": "%view.sidebar%"
         }
       ]
     }
@@ -663,11 +752,12 @@
     "check-types": "tsc --noEmit",
     "compile-tests": "tsc -p . --outDir out",
     "lint": "eslint src",
-    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "pretest": "pnpm run check-l10n && pnpm run compile-tests && pnpm run compile && pnpm run lint",
     "test": "vscode-test",
     "vsix": "vsce package --no-dependencies --baseImagesUrl https://raw.githubusercontent.com/JJLIM00/TabPalette/HEAD/",
     "publish": "vsce publish --no-dependencies --baseImagesUrl https://raw.githubusercontent.com/JJLIM00/TabPalette/HEAD/",
-    "test:ui": "pnpm run compile-tests && pnpm run compile && mocha --ui tdd --timeout 60000 \"out/test-ui/**/*.test.js\""
+    "test:ui": "pnpm run compile-tests && pnpm run compile && mocha --ui tdd --timeout 60000 \"out/test-ui/**/*.test.js\"",
+    "check-l10n": "node scripts/l10n.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -693,5 +783,6 @@
       "@vscode/vsce-sign",
       "esbuild"
     ]
-  }
+  },
+  "l10n": "./l10n"
 }

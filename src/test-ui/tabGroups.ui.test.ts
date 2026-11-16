@@ -317,6 +317,51 @@ suite('TabPalette — used like a person would', function () {
     });
   });
 
+  // ------------------------------------------------------------------ settings
+
+  suite('settings (tabPalette.*)', () => {
+    teardown(async () => {
+      for (const key of ['tabPalette.tabBar.activeTabOutline', 'tabPalette.tabBar.chipMaxWidth', 'tabPalette.groupColors.color2']) {
+        await vscode.setUserSetting(key, undefined);
+      }
+    });
+
+    test('turning the active tab outline off keeps the group line under the active tab', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt'], 'Blue');
+      await vscode.clickTab('b.txt');
+      await vscode.setUserSetting('tabPalette.tabBar.activeTabOutline', false);
+      await vscode.waitUntil('the outline is gone', async () => !(await vscode.tab('b.txt')).outlined);
+      assert.strictEqual((await vscode.tab('b.txt')).lineColor, COLORS.Blue, 'the group line runs under the active tab');
+      await vscode.setUserSetting('tabPalette.tabBar.activeTabOutline', undefined);
+      await vscode.waitUntil('the outline is back', async () => (await vscode.tab('b.txt')).outlined);
+    });
+
+    test('a long group name is cut at the chip max width', async () => {
+      await makeGroup('A very long group name for the chip', ['a.txt']);
+      const width = () => vscode.page.evaluate(() => Math.round((document.querySelector('.tabs-container .tg-chip') as HTMLElement).getBoundingClientRect().width));
+      assert.strictEqual(await width(), 160, 'the default max width');
+      await vscode.setUserSetting('tabPalette.tabBar.chipMaxWidth', 80);
+      await vscode.waitUntil('the chip is narrower', async () => (await width()) === 80);
+      assert.ok((await vscode.chipLeft('A very long group name for the chip')) >= 0, 'the chip stays on screen');
+    });
+
+    test('a group color set in the settings colors the chip, the group line and the side bar header', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt'], 'Blue');
+      await vscode.clickTab('d.txt');
+      await vscode.setUserSetting('tabPalette.groupColors.color2', '#123456');
+      const custom = 'rgb(18, 52, 86)';
+      await vscode.waitUntil('the chip takes the color', async () => (await vscode.chip('Main'))?.color === custom);
+      assert.strictEqual((await vscode.tab('a.txt')).lineColor, custom);
+      const frame = await vscode.openSidebar();
+      await vscode.waitUntil('the side bar header takes the color', async () =>
+        (await frame.locator('.group-header', { hasText: 'Main' }).evaluate((el) => getComputedStyle(el).backgroundColor)) === custom,
+      );
+      await vscode.runCommand('View: Show Explorer');
+      await vscode.setUserSetting('tabPalette.groupColors.color2', undefined);
+      await vscode.waitUntil('the theme color is back', async () => (await vscode.chip('Main'))?.color === COLORS.Blue);
+    });
+  });
+
   // ------------------------------------------------------------------ collapse and expand
 
   suite('performance', () => {
@@ -496,6 +541,19 @@ suite('TabPalette — used like a person would', function () {
         assert.strictEqual(color, 'rgb(0, 255, 0)');
       } finally {
         await vscode.setColorCustomizations(undefined);
+      }
+    });
+
+    test('the setting tabPalette.ungroupDropLineColor sets the "ungroup" drop line color', async () => {
+      await vscode.setUserSetting('tabPalette.ungroupDropLineColor', '#0000ff');
+      try {
+        await makeGroup('Main', ['a.txt', 'b.txt']);
+        await vscode.startTabDrag('b.txt', { before: 'c.txt' });
+        const color = await vscode.dropMarkerColor();
+        await vscode.drop();
+        assert.strictEqual(color, 'rgb(0, 0, 255)');
+      } finally {
+        await vscode.setUserSetting('tabPalette.ungroupDropLineColor', undefined);
       }
     });
 

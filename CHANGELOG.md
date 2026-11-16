@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- New **settings** (search for TabPalette in Settings). Changes apply at once:
+  - `tabPalette.tabBar.activeTabOutline` turns Chrome's rounded outline around a group's active tab on or off.
+  - `tabPalette.tabBar.chipMaxWidth` sets how wide a group chip can get before a long name is cut.
+  - `tabPalette.groupColors.color1` … `color9` set each group color to a hex color for every theme. They apply to the chips, group lines, side bar and pickers. Each field shows the slot's default color; left unchanged, the slot keeps its theme color.
+  - `tabPalette.ungroupDropLineColor` sets the color of the drop line shown when a dropped tab would leave its group.
+- Simplified Chinese (简体中文), Traditional Chinese (繁體中文) and Japanese (日本語). When VS Code's display language is one of them, TabPalette's commands, menus, settings, messages, group editor and side bar show in that language.
+
 ## 0.2.2
 
 - Tabs that show no file can join groups: webviews like Git Graph and Claude Code, terminals in the editor, Keyboard Shortcuts and other special editors. Right-click them on the tab bar or in the side bar, or drag them into a group, like any tab. On the tab bar, "Add Tab to Group…" on a grouped one offers "Remove from group". The side bar shows their icons, the same as the tab bar: the pictures of webviews like Git Graph and Claude Code, and the symbols of Settings, Extension pages and Keyboard Shortcuts.

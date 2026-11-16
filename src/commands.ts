@@ -4,7 +4,9 @@ import { Bridge, UiAction } from './bridge';
 import { colorIconFactory } from './colorIcons';
 import { Layout } from './layout';
 import { GROUP_COLORS, GroupColor, TabGroup, colorLabel, displayName, isGroupColor } from './model';
+import type { Settings } from './settings';
 import { GroupStore } from './store';
+import { t, tabCount } from './text';
 import { CloseGuard, activeTabUri, menuTabUri, openFiles, openUris, selectedTabUris } from './tabs';
 
 const NEW_GROUP = '__new__';
@@ -18,28 +20,30 @@ export interface CommandDeps {
   bridge: () => Bridge | undefined;
   /** Opens the group settings in the side bar; false when the side bar is not shown. */
   editInSidebar?: (groupId: string) => boolean;
+  /** The user's settings (the group colors for the pickers' dots). */
+  settings: () => Settings;
 }
 
 export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps): (action: UiAction) => Promise<void> {
   const { store, guard, layout } = deps;
-  /** A dot in the group color for the pickers; follows the user's workbench.colorCustomizations. */
-  const colorIcon = colorIconFactory(ctx);
+  /** A dot in the group color for the pickers; follows the user's color settings. */
+  const colorIcon = colorIconFactory(ctx, deps.settings);
 
   // ---------- prompts (fallbacks when the in-tab-bar editor is not available) ----------
 
-  const promptName = (value = '', title = 'Group name') =>
-    vscode.window.showInputBox({ title, value, placeHolder: 'Name this group (optional)' });
+  const promptName = (value = '', title = t('group.name')) =>
+    vscode.window.showInputBox({ title, value, placeHolder: t('group.namePlaceholderOptional') });
 
   async function pickColor(current?: GroupColor): Promise<GroupColor | undefined> {
     type ColorItem = vscode.QuickPickItem & { color: GroupColor };
     const picked = await vscode.window.showQuickPick<ColorItem>(
       GROUP_COLORS.map((color) => ({
         label: colorLabel(color),
-        description: color === current ? 'current' : undefined,
+        description: color === current ? t('color.current') : undefined,
         iconPath: colorIcon(color),
         color,
       })),
-      { title: 'Group color' },
+      { title: t('group.color') },
     );
     return picked?.color;
   }
@@ -51,9 +55,9 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
    */
   async function pickGroup(placeHolder: string, exclude?: string): Promise<string | undefined> {
     type GroupItem = vscode.QuickPickItem & { id: string };
-    const items: GroupItem[] = [{ label: '$(add) New group', id: NEW_GROUP }];
+    const items: GroupItem[] = [{ label: `$(add) ${t('group.new')}`, id: NEW_GROUP }];
     if (exclude) {
-      items.push({ label: '$(close) Remove from group', id: REMOVE });
+      items.push({ label: `$(close) ${t('group.remove')}`, id: REMOVE });
     }
     const groups = store.all().filter((g) => g.id !== exclude && !g.closed);
     if (groups.length > 0) {
@@ -61,7 +65,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
       for (const g of groups) {
         items.push({
           label: displayName(g),
-          description: `${g.uris.length} tab${g.uris.length === 1 ? '' : 's'}`,
+          description: tabCount(g.uris.length),
           iconPath: colorIcon(g.color),
           id: g.id,
         });
@@ -119,7 +123,8 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     return single ? [single] : [];
   }
 
-  async function resolveGroup(arg: unknown, action: string): Promise<TabGroup | undefined> {
+  /** The group a command is for; `placeHolder` asks for one when nothing tells. */
+  async function resolveGroup(arg: unknown, placeHolder: string): Promise<TabGroup | undefined> {
     const fromSidebar = sidebarArg(arg);
     if (fromSidebar.groupId) {
       return store.get(fromSidebar.groupId);
@@ -142,18 +147,18 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
       return fromActive;
     }
     if (store.all().length === 0) {
-      void vscode.window.showInformationMessage('There are no tab groups yet.');
+      void vscode.window.showInformationMessage(t('group.noneYet'));
       return undefined;
     }
     type GroupItem = vscode.QuickPickItem & { id: string };
     const picked = await vscode.window.showQuickPick<GroupItem>(
-      store.all().map((g) => ({ label: displayName(g), iconPath: colorIcon(g.color), id: g.id, description: g.closed ? 'closed' : undefined })),
-      { placeHolder: `Select a group to ${action}` },
+      store.all().map((g) => ({ label: displayName(g), iconPath: colorIcon(g.color), id: g.id, description: g.closed ? t('group.closed') : undefined })),
+      { placeHolder },
     );
     return picked ? store.get(picked.id) : undefined;
   }
 
-  const noFiles = () => void vscode.window.showInformationMessage('Open a file to add it to a tab group.');
+  const noFiles = () => void vscode.window.showInformationMessage(t('tab.openFileFirst'));
 
   /** The selected tabs for a tab context-menu command (`arg`, `context` = the right-clicked tab). */
   const selectedTabs = async (arg: unknown, context: unknown) => {
@@ -172,7 +177,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     rename: (g, value) => typeof value === 'string' && store.rename(g.id, value.slice(0, 200)),
     setColor: (g, value) => isGroupColor(value) && store.setColor(g.id, value),
     newTab: async (g) => {
-      const uri = await pickWorkspaceFile(`New tab in "${displayName(g)}"`);
+      const uri = await pickWorkspaceFile(t('group.newTabIn', displayName(g)));
       if (uri) {
         await openFiles([uri.toString()]);
         await addTo(g.id, [uri.toString()]);
@@ -214,7 +219,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
       }
       const current = uris.length === 1 ? store.groupOf(uris[0]) : undefined;
       const id = current || store.all().some((g) => !g.closed)
-        ? await pickGroup(uris.length > 1 ? `Add ${uris.length} tabs to group` : 'Add tab to group', current?.id)
+        ? await pickGroup(uris.length > 1 ? t('tab.addManyToGroup', uris.length) : t('tab.addToGroup'), current?.id)
         : NEW_GROUP;
       if (id === REMOVE) {
         await commands['tabPalette.removeFromGroup'](undefined, uris.map((u) => vscode.Uri.parse(u)));
@@ -232,7 +237,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     'tabPalette.removeFromGroup': async (arg, multi) => {
       const uris = resolveFiles(arg, multi).filter((u) => store.groupOf(u));
       if (uris.length === 0) {
-        void vscode.window.showInformationMessage('This tab is not in a tab group.');
+        void vscode.window.showInformationMessage(t('tab.notGrouped'));
         return;
       }
       const former = new Map(uris.map((u) => [u, store.groupOf(u)!.id]));
@@ -257,7 +262,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     },
 
     'tabPalette.editGroup': async (arg) => {
-      const group = await resolveGroup(arg, 'edit');
+      const group = await resolveGroup(arg, t('pick.edit'));
       if (!group) {
         return;
       }
@@ -270,7 +275,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
         bridge.requestEdit(group.id);
         return;
       }
-      const name = await promptName(group.name, 'Rename group');
+      const name = await promptName(group.name, t('group.rename'));
       if (name !== undefined) {
         store.rename(group.id, name);
       }
@@ -280,14 +285,14 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
       }
     },
     'tabPalette.renameGroup': async (arg) => {
-      const group = await resolveGroup(arg, 'rename');
-      const name = group && (await promptName(group.name, 'Rename group'));
+      const group = await resolveGroup(arg, t('pick.rename'));
+      const name = group && (await promptName(group.name, t('group.rename')));
       if (group && name !== undefined) {
         store.rename(group.id, name);
       }
     },
     'tabPalette.changeColor': async (arg) => {
-      const group = await resolveGroup(arg, 'recolor');
+      const group = await resolveGroup(arg, t('pick.recolor'));
       const color = group && (await pickColor(group.color));
       if (group && color) {
         store.setColor(group.id, color);
@@ -295,27 +300,27 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     },
   };
 
-  const groupCommand = (action: string, verb: string) => async (arg: unknown) => {
-    const group = await resolveGroup(arg, verb);
+  const groupCommand = (action: string, placeHolder: string) => async (arg: unknown) => {
+    const group = await resolveGroup(arg, placeHolder);
     if (group) {
       await groupActions[action](group);
     }
   };
-  commands['tabPalette.toggleCollapse'] = groupCommand('toggleCollapse', 'collapse or expand');
-  commands['tabPalette.newTabInGroup'] = groupCommand('newTab', 'add a tab to');
-  commands['tabPalette.moveGroupToNewWindow'] = groupCommand('moveToNewWindow', 'move');
-  commands['tabPalette.closeGroup'] = groupCommand('close', 'close');
-  commands['tabPalette.ungroup'] = groupCommand('ungroup', 'ungroup');
-  commands['tabPalette.deleteGroup'] = groupCommand('delete', 'delete');
+  commands['tabPalette.toggleCollapse'] = groupCommand('toggleCollapse', t('pick.toggleCollapse'));
+  commands['tabPalette.newTabInGroup'] = groupCommand('newTab', t('pick.newTab'));
+  commands['tabPalette.moveGroupToNewWindow'] = groupCommand('moveToNewWindow', t('pick.moveToNewWindow'));
+  commands['tabPalette.closeGroup'] = groupCommand('close', t('pick.close'));
+  commands['tabPalette.ungroup'] = groupCommand('ungroup', t('pick.ungroup'));
+  commands['tabPalette.deleteGroup'] = groupCommand('delete', t('pick.delete'));
   commands['tabPalette.openGroup'] = async (arg) => {
-    const group = await resolveGroup(arg, 'reopen');
+    const group = await resolveGroup(arg, t('pick.reopen'));
     if (!group) {
       return;
     }
     const failed = await layout.reopen(group.id);
     if (failed.length > 0) {
       const names = failed.map((u) => path.basename(vscode.Uri.parse(u).path)).join(', ');
-      if (await vscode.window.showWarningMessage(`Could not open: ${names}`, 'Remove from group')) {
+      if (await vscode.window.showWarningMessage(t('group.couldNotOpen', names), t('group.remove'))) {
         store.removeUris(failed);
         store.pruneEmpty();
       }
@@ -331,39 +336,39 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     const open = openUris();
     const items: MenuItem[] = [];
     if (active) {
-      items.push({ label: `This tab: ${path.basename(active.path)}`, kind: vscode.QuickPickItemKind.Separator });
+      items.push({ label: t('menu.thisTab', path.basename(active.path)), kind: vscode.QuickPickItemKind.Separator });
       items.push(
         activeGroup
-          ? { label: '$(close) Remove tab from group', description: displayName(activeGroup), run: () => commands['tabPalette.removeFromGroup'](active) }
-          : { label: '$(add) Add tab to group…', run: () => commands['tabPalette.addToGroup'](active) },
+          ? { label: `$(close) ${t('menu.removeTab')}`, description: displayName(activeGroup), run: () => commands['tabPalette.removeFromGroup'](active) }
+          : { label: `$(add) ${t('menu.addTab')}`, run: () => commands['tabPalette.addToGroup'](active) },
       );
     }
     const openGroups = store.all().filter((g) => !g.closed);
     const closedGroups = store.all().filter((g) => g.closed);
     if (openGroups.length > 0) {
-      items.push({ label: 'Groups', kind: vscode.QuickPickItemKind.Separator });
+      items.push({ label: t('menu.groups'), kind: vscode.QuickPickItemKind.Separator });
       for (const g of openGroups) {
         const count = g.uris.filter((u) => open.has(u)).length;
         items.push({
           label: displayName(g),
-          description: `${count} tab${count === 1 ? '' : 's'}${g.collapsed ? ' · collapsed' : ''}`,
+          description: g.collapsed ? t('menu.collapsedCount', tabCount(count)) : tabCount(count),
           iconPath: colorIcon(g.color),
           run: () => commands['tabPalette.editGroup'](g.id),
         });
       }
     }
     if (closedGroups.length > 0) {
-      items.push({ label: 'Closed groups (pick to reopen)', kind: vscode.QuickPickItemKind.Separator });
+      items.push({ label: t('menu.closedGroups'), kind: vscode.QuickPickItemKind.Separator });
       for (const g of closedGroups) {
         items.push({
           label: displayName(g),
-          description: `${g.uris.length} tab${g.uris.length === 1 ? '' : 's'}`,
+          description: tabCount(g.uris.length),
           iconPath: colorIcon(g.color),
           run: () => commands['tabPalette.openGroup'](g.id),
         });
       }
     }
-    const picked = await vscode.window.showQuickPick(items, { title: 'TabPalette - Tab Groups', placeHolder: 'Pick a group' });
+    const picked = await vscode.window.showQuickPick(items, { title: t('menu.title'), placeHolder: t('menu.placeholder') });
     await picked?.run?.();
   }
   commands['tabPalette.showMenu'] = showGroupMenu;
@@ -425,5 +430,5 @@ async function pickWorkspaceFile(title: string): Promise<vscode.Uri | undefined>
       }))
       .sort((a, b) => a.label.localeCompare(b.label)),
   );
-  return (await vscode.window.showQuickPick(files, { title, placeHolder: 'Search files by name', matchOnDescription: true }))?.uri;
+  return (await vscode.window.showQuickPick(files, { title, placeHolder: t('files.search'), matchOnDescription: true }))?.uri;
 }

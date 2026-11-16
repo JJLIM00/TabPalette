@@ -1,7 +1,11 @@
+
+import { t } from './text';
+
 /**
  * The nine group colors are numbered slots, not fixed colors: each is a theme color
  * (`tabPalette.color1` … `tabPalette.color9`) that defaults to one of Chrome's group colors
- * and can be changed in `workbench.colorCustomizations`.
+ * and can be changed in `workbench.colorCustomizations`, or for every theme at once with the
+ * settings `tabPalette.groupColors.color1` … (which win, see settings.ts).
  */
 export const GROUP_COLORS = ['color1', 'color2', 'color3', 'color4', 'color5', 'color6', 'color7', 'color8', 'color9'] as const;
 
@@ -24,9 +28,14 @@ export function isGroupColor(value: unknown): value is GroupColor {
   return typeof value === 'string' && (GROUP_COLORS as readonly string[]).includes(value);
 }
 
+/** A plain hex color (#rgb, #rgba, #rrggbb or #rrggbbaa). */
+export function isHexColor(value: unknown): value is string {
+  return typeof value === 'string' && /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value);
+}
+
 /** "Color 1" … "Color 9" (the slots can be any color, so they are not named after one). */
 export function colorLabel(color: GroupColor): string {
-  return `Color ${color.slice('color'.length)}`;
+  return t('color.n', color.slice('color'.length));
 }
 
 /** Theme color id of a slot, contributed in package.json (CSS variable `--vscode-tabPalette-colorN`). */
@@ -35,5 +44,5 @@ export function themeColorId(color: GroupColor): string {
 }
 
 export function displayName(group: TabGroup): string {
-  return group.name.trim() || 'Unnamed group';
+  return group.name.trim() || t('group.unnamed');
 }

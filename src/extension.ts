@@ -5,6 +5,7 @@ import { registerContextKeys } from './contextKeys';
 import { Layout } from './layout';
 import { MembershipTracker } from './membership';
 import { registerPatchCommands } from './patchCommands';
+import { SettingsWatcher } from './settings';
 import { GroupStore } from './store';
 import { registerFileSync } from './fileSync';
 import { SIDEBAR_VIEW_ID, SidebarProvider } from './sidebar';
@@ -17,22 +18,38 @@ export interface TabGroupsApi {
   layout: Layout;
   /** The Tab Groups view in the side bar. */
   sidebar: SidebarProvider;
+  /** The user's settings. */
+  settings: SettingsWatcher;
   /** Starts the bridge to the tab bar UI (normally started when the patch is enabled). */
   startBridge: () => Promise<Bridge>;
 }
 
 export function activate(context: vscode.ExtensionContext): TabGroupsApi {
   const store = new GroupStore(context.workspaceState);
+  const settings = new SettingsWatcher();
+  const current = () => settings.current;
   const guard = new CloseGuard();
   const tracker = new MembershipTracker(store, guard);
   const layout = new Layout(store, tracker, guard);
 
   let bridge: Bridge | undefined;
-  const handleUiAction = registerCommands(context, { store, guard, layout, bridge: () => bridge, editInSidebar: (id) => sidebar.editGroup(id) });
-  const sidebar = new SidebarProvider(context.extensionUri, store, layout, handleUiAction, () => bridge);
+  const handleUiAction = registerCommands(context, {
+    store,
+    guard,
+    layout,
+    bridge: () => bridge,
+    editInSidebar: (id) => sidebar.editGroup(id),
+    settings: current,
+  });
+  const sidebar = new SidebarProvider(context.extensionUri, store, layout, handleUiAction, () => bridge, current);
+  // A changed setting redraws the tab bar and the side bar.
+  settings.onDidChange(() => {
+    bridge?.schedule();
+    sidebar.refresh();
+  });
   const startBridge = async () => {
     if (!bridge) {
-      bridge = new Bridge(store, handleUiAction, undefined, (row, uri) => tracker.groupIn(row, uri));
+      bridge = new Bridge(store, handleUiAction, undefined, (row, uri) => tracker.groupIn(row, uri), current);
       // The side bar shows the tab bar's selection.
       bridge.onDidChangeReport(() => sidebar.refresh());
       await bridge.start();
@@ -45,7 +62,7 @@ export function activate(context: vscode.ExtensionContext): TabGroupsApi {
     sidebar.refresh();
   };
 
-  context.subscriptions.push(store, tracker, registerFileSync(store), registerContextKeys(store), { dispose: stopBridge });
+  context.subscriptions.push(store, settings, tracker, registerFileSync(store), registerContextKeys(store), { dispose: stopBridge });
   context.subscriptions.push(sidebar, vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, sidebar));
   registerSidebarTabCommands(context, layout);
 
@@ -56,5 +73,5 @@ export function activate(context: vscode.ExtensionContext): TabGroupsApi {
     onDisabled: stopBridge,
   });
 
-  return { store, layout, sidebar, startBridge };
+  return { store, settings, layout, sidebar, startBridge };
 }

@@ -57,8 +57,31 @@
     return el('span', 'icon');
   }
 
+  /** The text to show, in VS Code's language (see pageText in text.ts); sent before the first state. */
+  let text = {};
+
+  /** The text `key`, with {0}, {1} filled in from the other arguments. */
+  function tx(key, ...args) {
+    return String(text[key] || '').replace(/\{(\d)\}/g, (m, i) => (args[+i] !== undefined ? String(args[+i]) : m));
+  }
+
+  /** "1 tab", "3 tabs". */
+  function tabCount(count) {
+    return count === 1 ? tx('tabs.one') : tx('tabs.many', count);
+  }
+
+  /** A group's name, or "Unnamed group". */
+  function nameOf(group) {
+    return group.name || tx('group.unnamed');
+  }
+
   window.addEventListener('message', (e) => {
-    if (e.data && e.data.type === 'state') {
+    if (e.data && e.data.type === 'text' && e.data.text && typeof e.data.text === 'object') {
+      text = e.data.text;
+    } else if (e.data && e.data.type === 'state') {
+      if (state && JSON.stringify(state.colors) !== JSON.stringify(e.data.state.colors)) {
+        textColors.clear(); // the group colors changed in the settings
+      }
       state = e.data.state;
       loadFonts(state.fonts || []);
       pruneSelection();
@@ -97,8 +120,16 @@
     return node;
   }
 
+  /** A color slot's color: the one set in the settings, else its theme color. */
   function colorVar(color) {
-    return 'var(--vscode-tabPalette-' + color + ')';
+    const set = state && state.colors ? state.colors[color] : undefined;
+    return typeof set === 'string' && /^#[0-9a-f]{3,8}$/i.test(set) ? set : 'var(--vscode-tabPalette-' + color + ')';
+  }
+
+  /** The drop line's color when a dropped tab would leave its group: the setting's, else the theme color. */
+  function ungroupColor() {
+    const set = state ? state.ungroupDropLine : undefined;
+    return typeof set === 'string' && /^#[0-9a-f]{3,8}$/i.test(set) ? set : 'var(--vscode-tabPalette-ungroupDropLine)';
   }
 
   /** Text color for each group color, worked out once per theme (reading computed styles is slow). */
@@ -113,7 +144,8 @@
   }
 
   function readableTextOn(color) {
-    const value = getComputedStyle(document.documentElement).getPropertyValue('--vscode-tabPalette-' + color).trim();
+    const set = colorVar(color);
+    const value = set.startsWith('#') ? set : getComputedStyle(document.documentElement).getPropertyValue('--vscode-tabPalette-' + color).trim();
     const m = /^#([0-9a-f]{3,8})$/i.exec(value);
     if (!m) {
       return 'var(--vscode-editor-background)';
@@ -138,7 +170,7 @@
     for (const row of state.rows) {
       const section = el('div', 'row' + (row.active ? ' active-row' : ''));
       if (several) {
-        section.append(el('div', 'row-title', 'Editor Group ' + (row.index + 1)));
+        section.append(el('div', 'row-title', tx('sidebar.editorGroup', row.index + 1)));
       }
       let i = 0;
       while (i < row.tabs.length) {
@@ -171,12 +203,12 @@
       root.append(section);
     }
     if (state.rows.every((r) => r.tabs.length === 0)) {
-      root.prepend(el('div', 'empty', 'No open tabs'));
+      root.prepend(el('div', 'empty', tx('sidebar.noTabs')));
     }
     const closed = state.groups.filter((g) => g.closed);
     if (closed.length > 0) {
       const section = el('div', 'closed');
-      section.append(el('div', 'row-title', 'Closed groups'));
+      section.append(el('div', 'row-title', tx('sidebar.closedGroups')));
       for (const group of closed) {
         section.append(closedGroup(group));
       }
@@ -202,7 +234,7 @@
     }
     const node = el('div', 'popup');
     node.setAttribute('role', 'dialog');
-    node.setAttribute('aria-label', 'Edit tab group');
+    node.setAttribute('aria-label', tx('editor.label'));
     node.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -213,10 +245,10 @@
     const input = el('input', 'name');
     input.type = 'text';
     input.value = group.name;
-    input.placeholder = 'Name this group';
+    input.placeholder = tx('group.namePlaceholder');
     input.spellcheck = false;
     input.maxLength = 200;
-    input.setAttribute('aria-label', 'Group name');
+    input.setAttribute('aria-label', tx('group.name'));
     // The name updates as you type, like Chrome.
     input.addEventListener('input', () => {
       clearTimeout(renameTimer);
@@ -231,12 +263,12 @@
 
     const swatches = el('div', 'colors');
     swatches.setAttribute('role', 'radiogroup');
-    swatches.setAttribute('aria-label', 'Group color');
+    swatches.setAttribute('aria-label', tx('group.color'));
     for (let n = 1; n <= 9; n++) {
       const color = 'color' + n;
       const swatch = el('button', 'color');
       swatch.type = 'button';
-      swatch.title = 'Color ' + n;
+      swatch.title = tx('color.n', n);
       swatch.dataset.color = color;
       swatch.setAttribute('role', 'radio');
       swatch.style.setProperty('--c', colorVar(color));
@@ -265,12 +297,12 @@
       input,
       swatches,
       el('div', 'separator'),
-      item('i-add', 'New tab in group', 'newTab'),
-      item('i-window', 'Move group to new window', 'moveToNewWindow'),
-      item('i-close', 'Close group', 'close'),
+      item('i-add', tx('editor.newTab'), 'newTab'),
+      item('i-window', tx('editor.moveToNewWindow'), 'moveToNewWindow'),
+      item('i-close', tx('editor.close'), 'close'),
       el('div', 'separator'),
-      item('i-ungroup', 'Ungroup', 'ungroup'),
-      item('i-delete', 'Delete group', 'delete'),
+      item('i-ungroup', tx('editor.ungroup'), 'ungroup'),
+      item('i-delete', tx('editor.delete'), 'delete'),
     );
     document.body.append(node);
     popup = { groupId: groupId, node: node, input: input, swatches: swatches };
@@ -407,8 +439,8 @@
       item.append(el('span', 'description', tab.description));
     }
     const close = el('button', 'close');
-    close.title = tab.dirty ? 'Close (unsaved changes)' : 'Close';
-    close.setAttribute('aria-label', 'Close ' + tab.label);
+    close.title = tab.dirty ? tx('sidebar.closeUnsaved') : tx('sidebar.close');
+    close.setAttribute('aria-label', tx('sidebar.closeNamed', tab.label));
     close.tabIndex = -1;
     item.append(close);
 
@@ -466,7 +498,7 @@
       const tabs = selected && selection.keys.size > 1 ? selectedTabs(row) : [{ index: index, key: tab.key, groupId: tab.groupId }];
       drag = { kind: 'tabs', row: row.index, tabs: tabs };
       e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', tabs.length > 1 ? tabs.length + ' tabs' : tab.label);
+      e.dataTransfer.setData('text/plain', tabs.length > 1 ? tabCount(tabs.length) : tab.label);
     });
     item.addEventListener('dragend', endDrag);
     item.addEventListener('dragover', (e) => overTab(e, item, row, tab, index));
@@ -568,8 +600,8 @@
     const name = el('span', 'group-name', group.name || '');
     header.classList.toggle('editing', !!popup && popup.groupId === group.id);
     header.title =
-      (group.name || 'Unnamed group') + ' · ' + count + ' tab' + (count === 1 ? '' : 's') + ' (click to ' + (group.collapsed ? 'expand' : 'collapse') + ', drag to move, right-click, ⋮ or F2 to edit)';
-    header.setAttribute('aria-label', (group.name || 'Unnamed group') + ', ' + count + ' tab' + (count === 1 ? '' : 's'));
+      tx(group.collapsed ? 'sidebar.headerCollapsed' : 'sidebar.headerExpanded', nameOf(group), tabCount(count));
+    header.setAttribute('aria-label', nameOf(group) + ', ' + tabCount(count));
     header.append(name);
     if (group.collapsed) {
       header.append(el('span', 'count', String(count)));
@@ -578,8 +610,8 @@
     const more = el('button', 'more');
     more.type = 'button';
     more.tabIndex = -1;
-    more.title = 'Edit group';
-    more.setAttribute('aria-label', 'Edit group ' + (group.name || 'Unnamed group'));
+    more.title = tx('sidebar.editGroup');
+    more.setAttribute('aria-label', tx('sidebar.editGroupNamed', nameOf(group)));
     more.addEventListener('click', (e) => {
       e.stopPropagation();
       if (popup && popup.groupId === group.id) {
@@ -609,7 +641,7 @@
     header.addEventListener('dragstart', (e) => {
       drag = { kind: 'group', row: row.index, groupId: group.id };
       e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', group.name || 'Unnamed group');
+      e.dataTransfer.setData('text/plain', nameOf(group));
     });
     header.addEventListener('dragend', endDrag);
     header.addEventListener('dragover', (e) => {
@@ -633,10 +665,10 @@
     item.tabIndex = 0;
     item.setAttribute('role', 'button');
     item.style.setProperty('--group-color', colorVar(group.color));
-    item.title = 'Reopen "' + (group.name || 'Unnamed group') + '" (' + group.count + ' tab' + (group.count === 1 ? '' : 's') + ')';
+    item.title = tx('sidebar.reopen', nameOf(group), tabCount(group.count));
     item.dataset.focusKey = 'closed:' + group.id;
     item.dataset.vscodeContext = JSON.stringify({ webviewSection: 'closedGroup', groupId: group.id, preventDefaultContextMenuItems: true });
-    item.append(el('span', 'dot'), el('span', 'label', group.name || 'Unnamed group'), el('span', 'description', String(group.count)));
+    item.append(el('span', 'dot'), el('span', 'label', nameOf(group)), el('span', 'description', String(group.count)));
     const reopen = () => vscode.postMessage({ type: 'reopen', groupId: group.id });
     item.addEventListener('click', reopen);
     item.addEventListener('keydown', (e) => {
@@ -697,7 +729,7 @@
     const leaves = !joins && leavesGroup(row, drag);
     item.style.setProperty(
       '--drop-color',
-      group ? colorVar(group.color) : leaves ? 'var(--vscode-tabPalette-ungroupDropLine)' : 'var(--vscode-focusBorder)',
+      group ? colorVar(group.color) : leaves ? ungroupColor() : 'var(--vscode-focusBorder)',
     );
   }
 
@@ -718,7 +750,7 @@
       end.classList.add('drop-end');
       const row = state.rows.find((r) => r.index === drag.row);
       const leaves = row && leavesGroup(row, drag);
-      end.style.setProperty('--drop-color', leaves ? 'var(--vscode-tabPalette-ungroupDropLine)' : 'var(--vscode-focusBorder)');
+      end.style.setProperty('--drop-color', leaves ? ungroupColor() : 'var(--vscode-focusBorder)');
     }
   });
   document.addEventListener('drop', (e) => {
