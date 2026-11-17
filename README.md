@@ -6,8 +6,8 @@
 
 **Chrome-style tab groups for VS Code.**
 
-[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/JJLIM00.tabpalette?label=Marketplace&color=1a73e8)](https://marketplace.visualstudio.com/items?itemName=JJLIM00.tabpalette)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/JJLIM00.tabpalette?color=188038)](https://marketplace.visualstudio.com/items?itemName=JJLIM00.tabpalette)
+[![VS Marketplace](https://vsmarketplacebadges.dev/version-short/JJLIM00.tabpalette.svg?label=Marketplace&color=1a73e8)](https://marketplace.visualstudio.com/items?itemName=JJLIM00.tabpalette)
+[![Installs](https://vsmarketplacebadges.dev/installs-short/JJLIM00.tabpalette.svg?label=Installs&color=188038)](https://marketplace.visualstudio.com/items?itemName=JJLIM00.tabpalette)
 [![CI](https://github.com/JJLIM00/TabPalette/actions/workflows/ci.yml/badge.svg)](https://github.com/JJLIM00/TabPalette/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-grey)](LICENSE)
 
