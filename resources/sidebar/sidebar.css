@@ -17,7 +17,19 @@
   --icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E");
 }
 
+/* The body scrolls (not the page), so its scroll bar can show only while the mouse is over
+   the view, like the Explorer's. */
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+  /* VS Code gives webviews a scrollbar-color, which would turn off the scroll bar styles below. */
+  scrollbar-color: auto;
   margin: 0;
   padding: 4px 0 0;
   background: var(--vscode-sideBar-background);
@@ -25,6 +37,40 @@ body {
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
   user-select: none;
+}
+
+/* The scroll bar looks like the Explorer's: 10px, rounded, no arrows, no track. The slider fades
+   in while the mouse is over the view or just after a scroll, and out after: sidebar.js moves
+   --scrollbar-alpha (0 to 1), since a scroll bar does not take CSS transitions. */
+body::-webkit-scrollbar {
+  width: 10px;
+}
+
+body::-webkit-scrollbar-button {
+  display: none;
+}
+
+body::-webkit-scrollbar-track,
+body::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* keeps the slider's rounded ends off the view's edges, where the pane header line meets it */
+body::-webkit-scrollbar-track {
+  margin: 2px 0;
+}
+
+body::-webkit-scrollbar-thumb {
+  border-radius: 5px;
+  background-color: color-mix(in srgb, var(--vscode-scrollbarSlider-background) calc(var(--scrollbar-alpha, 0) * 100%), transparent);
+}
+
+body::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--vscode-scrollbarSlider-hoverBackground) calc(var(--scrollbar-alpha, 0) * 100%), transparent);
+}
+
+body::-webkit-scrollbar-thumb:active {
+  background-color: color-mix(in srgb, var(--vscode-scrollbarSlider-activeBackground) calc(var(--scrollbar-alpha, 0) * 100%), transparent);
 }
 
 #root {

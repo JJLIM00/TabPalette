@@ -68,7 +68,7 @@ function run(command: string, ...args: unknown[]): Thenable<unknown> {
 }
 
 /** The settings these tests change (in the test instance's own user settings). */
-const TEST_SETTINGS = ['tabBar.activeTabOutline', 'tabBar.chipMaxWidth', 'ungroupDropLineColor', ...GROUP_COLORS.map((c) => `groupColors.${c}`)];
+const TEST_SETTINGS = ['tabBar.activeTabOutline', 'tabBar.chipMaxWidth', 'tabBar.chipTabCount', 'ungroupDropLineColor', ...GROUP_COLORS.map((c) => `groupColors.${c}`)];
 
 async function setSettings(values: Record<string, unknown>): Promise<void> {
   const config = vscode.workspace.getConfiguration(SETTINGS_SECTION);
@@ -950,8 +950,8 @@ suite('TabPalette in a real VS Code window', () => {
         }
       });
       try {
-        await setSettings({ 'tabBar.activeTabOutline': false, 'tabBar.chipMaxWidth': 90, 'groupColors.color2': '#123456', ungroupDropLineColor: '#00ff00' });
-        const wanted = { activeTabOutline: false, chipMaxWidth: 90, colors: { color2: '#123456' }, ungroupDropLine: '#00ff00' };
+        await setSettings({ 'tabBar.activeTabOutline': false, 'tabBar.chipMaxWidth': 90, 'tabBar.chipTabCount': 'always', 'groupColors.color2': '#123456', ungroupDropLineColor: '#00ff00' });
+        const wanted = { activeTabOutline: false, chipMaxWidth: 90, chipTabCount: 'always', colors: { color2: '#123456' }, ungroupDropLine: '#00ff00' };
         await waitFor('the new settings reach the tab bar', () => JSON.stringify(last) === JSON.stringify(wanted));
       } finally {
         await resetSettings();

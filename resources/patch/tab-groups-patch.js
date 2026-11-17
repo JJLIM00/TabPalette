@@ -213,7 +213,7 @@
     // ---------------------------------------------------------------- settings
 
     /** The user's settings (sent with every state, see settings.ts); the defaults while not connected. */
-    var DEFAULT_SETTINGS = { activeTabOutline: true, chipMaxWidth: 160, colors: {} };
+    var DEFAULT_SETTINGS = { activeTabOutline: true, chipMaxWidth: 160, chipTabCount: 'off', colors: {} };
     var settings = DEFAULT_SETTINGS;
     var appliedSettings = JSON.stringify(DEFAULT_SETTINGS);
 
@@ -353,9 +353,16 @@
             delete container.dataset.tgRow;
           }
         });
+        // How many tabs each group has in this row (collapsed ones included), for the chip counts.
+        var counts = {};
+        (info && settings.chipTabCount !== 'off' ? info : []).forEach(function (t) {
+          if (t.group) {
+            counts[t.group] = (counts[t.group] || 0) + 1;
+          }
+        });
         for (var i = 0; i < tabs.length; i++) {
           var gid = info ? info[i].group : null;
-          decorate(tabs[i], gid ? groups[gid] : null, info, i, fg);
+          decorate(tabs[i], gid ? groups[gid] : null, info, i, fg, gid ? counts[gid] : 0);
         }
       }
       if (openEditorFor && !groups[openEditorFor]) {
@@ -380,7 +387,12 @@
 
     var pendingEdit = null;
 
-    function decorate(tab, g, info, i, fg) {
+    /** Whether a group's chip shows its tab count (setting tabPalette.tabBar.chipTabCount). */
+    function showsCount(g) {
+      return settings.chipTabCount === 'always' || (settings.chipTabCount === 'collapsed' && g.collapsed);
+    }
+
+    function decorate(tab, g, info, i, fg, count) {
       var first = !!g && !(i > 0 && info[i - 1].group === g.id);
       var last = !!g && !(i < info.length - 1 && info[i + 1].group === g.id);
       toggle(tab, 'tg-member', !!g);
@@ -416,6 +428,7 @@
       }
       if (!chip) {
         chip = el('div', 'tg-chip');
+        chip.appendChild(el('span', 'tg-name'));
         wireChip(chip);
         tab.appendChild(chip);
       }
@@ -423,15 +436,25 @@
       if (chip.dataset.gid !== g.id) {
         chip.dataset.gid = g.id;
       }
-      if (chip.textContent !== name) {
-        chip.textContent = name;
+      var label = chip.firstChild;
+      if (label.textContent !== name) {
+        label.textContent = name;
+      }
+      // The count is drawn by CSS from data-count, so the chip's text stays the group name.
+      var shown = showsCount(g) ? String(count) : '';
+      if ((chip.dataset.count || '') !== shown) {
+        if (shown) {
+          chip.dataset.count = shown;
+        } else {
+          delete chip.dataset.count;
+        }
       }
       toggle(chip, 'tg-unnamed', !name);
       setVar(chip, '--tg-chip-fg', fg[g.color]);
       chip.title = tx(g.collapsed ? 'chip.titleCollapsed' : 'chip.titleExpanded', name || tx('group.unnamed'));
       // Measuring forces a layout, so a chip is measured again only when its text or the theme
       // changed. A chip that is not on screen measures 0: try again on the next redraw.
-      var measured = name + '|' + theme.generation;
+      var measured = name + '|' + shown + '|' + theme.generation;
       if (chip.dataset.tgMeasured !== measured) {
         var width = chip.offsetWidth;
         if (width > 0) {
@@ -1080,10 +1103,18 @@
         '.monaco-workbench .part.editor .tabs-container.tg-leave > .tab.drop-target-right::before' +
         ' { background-color: var(--tg-ungroup, var(--vscode-tabPalette-ungroupDropLine, #F14C4C)) !important; width: 3px !important; }',
       '.tg-chip { position: absolute; left: calc(-1 * (var(--tg-chip-w, 14px) + 6px)); top: 50%; transform: translateY(-50%); z-index: 12; box-sizing: border-box;' +
-        ' height: 20px; line-height: 20px; padding: 0 8px; max-width: var(--tg-chip-max, 160px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' +
+        ' display: flex; align-items: center; gap: 5px; height: 20px; line-height: 20px; padding: 0 8px; max-width: var(--tg-chip-max, 160px); overflow: hidden; white-space: nowrap;' +
         ' border-radius: 6px; background: var(--tg-color); color: var(--tg-chip-fg, #202124);' +
         ' font-size: 12px; font-weight: 600; cursor: pointer; user-select: none; -webkit-user-select: none; }',
+      '.tg-chip > .tg-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }',
+      /* the tab count (setting tabPalette.tabBar.chipTabCount): a small badge in the chip text color */
+      '.tg-chip[data-count] { padding-right: 3px; }',
+      '.tg-chip[data-count]::after { content: attr(data-count); flex: none; box-sizing: border-box; min-width: 15px; height: 15px; line-height: 15px; padding: 0 4px;' +
+        ' border-radius: 4px; background: var(--tg-chip-fg, #202124); color: var(--tg-color); font-size: 10px; font-weight: 700; text-align: center; }',
       '.tg-chip.tg-unnamed { width: 14px; height: 14px; padding: 0; border-radius: 50%; }',
+      '.tg-chip.tg-unnamed > .tg-name { display: none; }',
+      /* an unnamed group with its count shown: a chip with only the count */
+      '.tg-chip.tg-unnamed[data-count] { width: auto; height: 20px; padding: 0 3px; border-radius: 6px; }',
       '.tg-chip:hover { filter: brightness(1.1); }',
       '.tg-chip.tg-dragging { opacity: .6; cursor: grabbing; }',
       'body.tg-group-dragging, body.tg-group-dragging * { cursor: grabbing !important; }',

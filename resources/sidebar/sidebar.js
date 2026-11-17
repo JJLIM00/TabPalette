@@ -107,6 +107,50 @@
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
   vscode.postMessage({ type: 'ready' });
 
+  // Like VS Code's own lists, the scroll bar shows only while the mouse is over the view, or
+  // for a moment after scrolling, fading in quickly (100 ms) and out slowly (800 ms). A scroll
+  // bar takes no CSS transitions (nor a :hover change), so the fade sets --scrollbar-alpha
+  // on <body> each frame (see sidebar.css).
+  let hovering = false;
+  let scrollTimer;
+  let alpha = 0;
+  let target = 0;
+  let lastFrame = 0;
+  let fadeFrame = 0;
+  function fadeStep(now) {
+    // (a frame's time can be a little before the time the fade started)
+    const elapsed = Math.max(0, Math.min(now - lastFrame, 100));
+    lastFrame = now;
+    alpha = target > alpha ? Math.min(target, alpha + elapsed / 100) : Math.max(target, alpha - elapsed / 800);
+    document.body.style.setProperty('--scrollbar-alpha', alpha.toFixed(3));
+    fadeFrame = alpha === target ? 0 : requestAnimationFrame(fadeStep);
+  }
+  function showScrollbar(scrolling) {
+    clearTimeout(scrollTimer);
+    target = hovering || scrolling ? 1 : 0;
+    if (!fadeFrame && alpha !== target) {
+      lastFrame = performance.now();
+      fadeFrame = requestAnimationFrame(fadeStep);
+    }
+    if (scrolling && !hovering) {
+      scrollTimer = setTimeout(() => showScrollbar(false), 1000);
+    }
+  }
+  document.addEventListener('mouseover', () => {
+    if (!hovering) {
+      hovering = true;
+      showScrollbar(false);
+    }
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (!e.relatedTarget) {
+      // left the view
+      hovering = false;
+      showScrollbar(false);
+    }
+  });
+  document.body.addEventListener('scroll', () => showScrollbar(true), { passive: true });
+
   // ---------------------------------------------------------------- drawing
 
   function el(tag, className, text) {

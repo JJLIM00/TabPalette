@@ -123,6 +123,7 @@ Search **TabPalette** in Settings. Changes apply at once.
 |---|---|---|
 | `tabPalette.tabBar.activeTabOutline` | on | Outline around the active tab |
 | `tabPalette.tabBar.chipMaxWidth` | 160 | Widest a chip can get (40–400 px) |
+| `tabPalette.tabBar.chipTabCount` | off | Tab count on a chip: off, while collapsed, or always |
 | `tabPalette.groupColors.color1` … `color9` | Chrome's colors | The nine group colors |
 | `tabPalette.ungroupDropLineColor` | red | Drop line when a tab leaves its group |
 

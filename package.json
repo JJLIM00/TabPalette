@@ -2,7 +2,7 @@
   "name": "tabpalette",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "JJLIM00",
   "license": "MIT",
   "repository": {
@@ -646,6 +646,22 @@
           "maximum": 400,
           "order": 2,
           "markdownDescription": "%setting.tabBar.chipMaxWidth%"
+        },
+        "tabPalette.tabBar.chipTabCount": {
+          "type": "string",
+          "enum": [
+            "off",
+            "collapsed",
+            "always"
+          ],
+          "enumDescriptions": [
+            "%setting.tabBar.chipTabCount.off%",
+            "%setting.tabBar.chipTabCount.collapsed%",
+            "%setting.tabBar.chipTabCount.always%"
+          ],
+          "default": "off",
+          "order": 3,
+          "markdownDescription": "%setting.tabBar.chipTabCount%"
         },
         "tabPalette.groupColors.color1": {
           "type": "string",

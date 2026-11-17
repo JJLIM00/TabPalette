@@ -29,6 +29,16 @@ suite('Settings (tabPalette.*)', () => {
     assert.strictEqual(parse({ 'tabBar.chipMaxWidth': NaN }).chipMaxWidth, DEFAULT_SETTINGS.chipMaxWidth);
   });
 
+  test('reads when a chip shows its tab count; an unknown mode gets the default', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.chipTabCount, 'off');
+    for (const mode of ['off', 'collapsed', 'always'] as const) {
+      assert.strictEqual(parse({ 'tabBar.chipTabCount': mode }).chipTabCount, mode);
+    }
+    for (const bad of ['Always', 'never', true, 3]) {
+      assert.strictEqual(parse({ 'tabBar.chipTabCount': bad }).chipTabCount, 'off', String(bad));
+    }
+  });
+
   test('lists only the group colors set to a hex color', () => {
     const settings = parse({
       'groupColors.color1': '#123',

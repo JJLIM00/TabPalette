@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Group chips on the tab bar can show how many tabs the group has, in a small badge. New setting `tabPalette.tabBar.chipTabCount`: off (default), while the group is collapsed, or always.
+- Fixed: the side bar's scroll bar was always shown, on the editor's background color. It now looks like the Explorer's: a thin rounded slider with no arrows, fading in while the mouse is over the view or just after scrolling, and fading out after.
+
 ## 0.3.0
 
 - New **settings** (search for TabPalette in Settings). Changes apply at once:

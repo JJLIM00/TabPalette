@@ -281,6 +281,14 @@ export class VSCodeWindow {
     );
   }
 
+  /** The tab count drawn on a group's chip (setting tabPalette.tabBar.chipTabCount), or null when none is shown. */
+  chipCount(group: string): Promise<string | null> {
+    return this.chipLocator(group).evaluate((chip) => {
+      const badge = getComputedStyle(chip, '::after');
+      return chip.dataset.count && badge.content !== 'none' && badge.display !== 'none' ? chip.dataset.count : null;
+    });
+  }
+
   async chip(name: string): Promise<ChipView | undefined> {
     return (await this.chips()).find((c) => c.name === name);
   }

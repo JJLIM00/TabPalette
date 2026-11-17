@@ -321,7 +321,7 @@ suite('TabPalette — used like a person would', function () {
 
   suite('settings (tabPalette.*)', () => {
     teardown(async () => {
-      for (const key of ['tabPalette.tabBar.activeTabOutline', 'tabPalette.tabBar.chipMaxWidth', 'tabPalette.groupColors.color2']) {
+      for (const key of ['tabPalette.tabBar.activeTabOutline', 'tabPalette.tabBar.chipMaxWidth', 'tabPalette.tabBar.chipTabCount', 'tabPalette.groupColors.color2']) {
         await vscode.setUserSetting(key, undefined);
       }
     });
@@ -334,6 +334,45 @@ suite('TabPalette — used like a person would', function () {
       assert.strictEqual((await vscode.tab('b.txt')).lineColor, COLORS.Blue, 'the group line runs under the active tab');
       await vscode.setUserSetting('tabPalette.tabBar.activeTabOutline', undefined);
       await vscode.waitUntil('the outline is back', async () => (await vscode.tab('b.txt')).outlined);
+    });
+
+    test('chips show no tab count by default', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt']);
+      await vscode.clickTab('d.txt');
+      assert.strictEqual(await vscode.chipCount('Main'), null, 'expanded');
+      await vscode.clickChip('Main');
+      assert.strictEqual((await vscode.chip('Main'))?.collapsed, true);
+      assert.strictEqual(await vscode.chipCount('Main'), null, 'collapsed');
+    });
+
+    test('set to collapsed, a chip shows its tab count while the group is collapsed', async () => {
+      await vscode.setUserSetting('tabPalette.tabBar.chipTabCount', 'collapsed');
+      await makeGroup('Main', ['a.txt', 'b.txt', 'c.txt']);
+      await vscode.clickTab('d.txt');
+      assert.strictEqual(await vscode.chipCount('Main'), null, 'expanded: no count');
+      await vscode.clickChip('Main');
+      await vscode.waitUntil('the collapsed chip shows 3', async () => (await vscode.chipCount('Main')) === '3');
+      const fits = await vscode.page.evaluate(() => {
+        const chip = document.querySelector('.tabs-container .tg-chip') as HTMLElement;
+        return chip.scrollWidth <= chip.clientWidth;
+      });
+      assert.ok(fits, 'the name and the count fit in the chip');
+      await vscode.clickChip('Main');
+      await vscode.waitUntil('the count is gone again', async () => (await vscode.chipCount('Main')) === null);
+    });
+
+    test('the tab count can be shown always, or never', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt']);
+      await vscode.clickTab('d.txt');
+      await vscode.setUserSetting('tabPalette.tabBar.chipTabCount', 'always');
+      await vscode.waitUntil('the expanded chip shows 2', async () => (await vscode.chipCount('Main')) === '2');
+      await addToGroup('c.txt', 'Main');
+      await vscode.waitUntil('the count follows the group', async () => (await vscode.chipCount('Main')) === '3');
+      await vscode.setUserSetting('tabPalette.tabBar.chipTabCount', 'off');
+      await vscode.clickTab('d.txt');
+      await vscode.clickChip('Main');
+      assert.strictEqual((await vscode.chip('Main'))?.collapsed, true);
+      assert.strictEqual(await vscode.chipCount('Main'), null, 'off: no count, even collapsed');
     });
 
     test('a long group name is cut at the chip max width', async () => {
