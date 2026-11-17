@@ -1,123 +1,156 @@
+<div align="center">
+
+<img src="images/icon.png" width="96" height="96" alt="TabPalette logo">
+
 # TabPalette - Tab Groups
 
+**Chrome-style tab groups for VS Code.**
+
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/JJLIM00.tabpalette?label=Marketplace&color=1a73e8)](https://marketplace.visualstudio.com/items?itemName=JJLIM00.tabpalette)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/JJLIM00.tabpalette?color=188038)](https://marketplace.visualstudio.com/items?itemName=JJLIM00.tabpalette)
 [![CI](https://github.com/JJLIM00/TabPalette/actions/workflows/ci.yml/badge.svg)](https://github.com/JJLIM00/TabPalette/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-grey)](LICENSE)
 
-**TabPalette** brings Chrome-style tab groups to VS Code. Name and color a group of tabs, collapse it to a single chip, and drag tabs in and out of it, right on the tab bar.
+<img src="images/banner.png" width="100%" alt="Tab groups on the VS Code tab bar and in the Tab Groups side bar">
 
-![Tab groups on the VS Code tab bar](images/tab-groups.png)
+</div>
+
+## What it does
+
+Name and color a set of tabs, collapse it to one chip, and drag tabs in and out, right on the tab bar. Groups are saved per workspace, so they come back when you reopen the folder.
 
 ## Features
 
-- **Group chips and lines.** Each group shows a colored chip with its name in front of its tabs, and a line in the group's color runs under them. The active tab in a group gets Chrome's rounded outline (you can turn it off in the [settings](#settings)).
-- **Nine colors, your palette.** Chrome's grey, blue, red, yellow, green, pink, purple, cyan and orange by default, tuned for light and dark themes. Each of the nine can be changed in the [settings](#settings).
-- **Collapse with a click.** Click a chip to hide the group's tabs, and click it again to bring them back.
-- **Edit in place.** Right-click a chip to rename the group, pick a color, open a new tab in it, move it to a new window, or close, ungroup or delete it.
-- **Drag and drop.** Drag tabs into a group, out of it, or between groups, and drag a chip to move the whole group. The drop line shows what will happen: the group's color when the tab will join, red when it will leave.
-- **Groups stay together.** A tab added to a group moves next to it. A tab removed from the middle of a group moves just past the group, so the group never splits.
-- **Saved per workspace.** Groups come back when you reopen the folder, including closed groups.
-- **Tab Groups side bar.** All open tabs listed top to bottom, like Chrome's vertical tabs, each group under a header in its color. See [The side bar](#the-side-bar).
-- **In your language.** English, Simplified Chinese (简体中文), Traditional Chinese (繁體中文) and Japanese (日本語), following VS Code's display language.
+<table>
+<tr>
+<td align="center" width="50%" valign="top">
+<h3>🎨 Make a group</h3>
+<p>Right-click a tab → Add Tab to New Group</p>
+<img src="images/make-group.gif" width="100%" alt="Making a group from a tab's menu">
+<br><br>
+</td>
+<td align="center" width="50%" valign="top">
+<h3>✏️ Name and color</h3>
+<p>Right-click a chip to rename, recolor, close or ungroup</p>
+<img src="images/group-editor.gif" width="100%" alt="Renaming and recoloring a group">
+<br><br>
+</td>
+</tr>
+<tr>
+<td align="center" width="50%" valign="top">
+<h3>🖱️ Drag and drop</h3>
+<p>Drag tabs into, out of and between groups</p>
+<img src="images/drag-drop.gif" width="100%" alt="Dragging tabs into and out of groups">
+<br><br>
+</td>
+<td align="center" width="50%" valign="top">
+<h3>📁 Collapse with a click</h3>
+<p>Click a chip to hide its tabs, click again to show them</p>
+<img src="images/collapse.gif" width="100%" alt="Collapsing and expanding groups">
+<br><br>
+</td>
+</tr>
+<tr>
+<td align="center" width="50%" valign="top">
+<h3>📋 Side bar</h3>
+<p>Every tab in a vertical list, like Chrome's vertical tabs</p>
+<img src="images/sidebar.gif" width="100%" alt="Using the Tab Groups side bar">
+<br><br>
+</td>
+<td align="center" width="50%" valign="top">
+<h3>⚙️ Your colors</h3>
+<p>Set the nine colors and chip width in Settings</p>
+<img src="images/settings.gif" width="100%" alt="Changing a group color and the chip width in Settings">
+<br><br>
+</td>
+</tr>
+</table>
 
-![Group editor](images/group-editor.png)
+## Get started
 
-## Getting started
+1. Install, click **Enable** when asked, reload the window.
+2. Right-click a tab → **Add Tab to New Group**.
+3. Drag more tabs onto it.
 
-1. Install **TabPalette - Tab Groups** from the Extensions view, or run `ext install JJLIM00.tabpalette` in Quick Open (`Ctrl+P`).
-2. On first start, TabPalette asks to **Enable** Chrome-style tab groups. Confirm, then reload the window. (Why it asks: see [How it draws on the tab bar](#how-it-draws-on-the-tab-bar).)
-3. Right-click a tab and choose **Add Tab to New Group**. Type a name, pick a color, and press Enter.
-4. Right-click more tabs and choose **Add Tab to Group…**, or drag them onto the group's tabs.
-
-![Add a tab to a group from the tab's context menu](images/add-to-group.png)
-
-## Usage
+<details>
+<summary><b>📖 How to use the tab bar</b></summary>
 
 | To… | Do this |
 |---|---|
-| Create a group | Right-click a tab → **Add Tab to New Group**. The group gets the next free color, and its editor opens so you can name it. |
-| Add a tab to a group | Right-click the tab → **Add Tab to Group…**, or drag it onto any tab of the group, even a group with a single tab. |
-| Group several tabs at once | Ctrl/Shift+click the tabs, then right-click → **Add Selected Tabs to Group…** (or **…to New Group**), or drag them onto a group together. |
-| Add a file from the Explorer | Right-click the file in the Explorer → **Add Tab to Group…** |
-| Remove a tab from its group | Right-click → **Tab Group → Remove Tab from Group**, or drag it out of the group: onto an ungrouped tab, a chip, or the empty end of the tab bar. |
-| Put a tab next to a group without joining it | Drop it on the group's chip: it lands just before the group. |
-| Collapse or expand | Click the chip. Opening a hidden tab (Quick Open, Explorer…) expands its group. |
-| Rename or recolor | Right-click the chip. The name updates as you type. Enter or Esc closes the editor. |
-| Move a group | Drag its chip to a new place on the tab bar. |
-| Close a group | Chip editor → **Close group**. The tabs close and the group is kept; reopen it from **Tab Groups: Show Tab Groups** (`Ctrl+Alt+T`). |
-| Ungroup or delete | **Ungroup** keeps the tabs open. **Delete group** closes them too. |
+| Create a group | Right-click a tab → **Add Tab to New Group** |
+| Add a tab | Drag it onto the group, or right-click → **Add Tab to Group…** |
+| Add several tabs | Ctrl/Shift+click them, then drag or right-click |
+| Remove a tab | Drag it out, or right-click → **Remove Tab from Group** |
+| Collapse / expand | Click the chip |
+| Rename / recolor | Right-click the chip |
+| Move a group | Drag the chip |
+| Close a group | Chip menu → **Close group**. Reopen with `Ctrl+Alt+T` |
+| Ungroup / delete | **Ungroup** keeps the tabs, **Delete** closes them |
 
-Closing a tab removes it from its group, and a group disappears when its last tab is closed. A group's only tab keeps its group wherever you drag it.
+</details>
 
-![Collapsed groups](images/collapsed.png)
-
-### The side bar
-
-Click the **Tab Groups** icon in the Activity Bar to see every open tab as a list, like Chrome's vertical tabs. Each group shows as a header in its color, with its tabs under it. The side bar works with or without the tab bar patch.
-
-![The Tab Groups side bar](images/sidebar.png)
+<details>
+<summary><b>📋 How to use the side bar</b></summary>
 
 | To… | Do this |
 |---|---|
-| Open or close a tab | Click it. Click its **×**, or middle-click it, to close it. |
-| Collapse or expand a group | Click its header. A collapsed header shows how many tabs it holds. |
-| Use a tab's menu | Right-click the tab: the Tab Groups items come first, then the same items as in the Explorer's **Open Editors** list (Open to the Side, Reveal in File Explorer, Copy Path, Save, Compare, Close Others and the like). |
-| Select several tabs | Ctrl+click (Cmd+click on macOS) to add or remove a tab, Shift+click to select a range. Drag one of them to move them all, right-click for **Add Selected Tabs to Group…** and the like, or press Delete to close them. A plain click clears the selection. While the tab bar patch is on, the side bar and the tab bar share one selection. |
-| Add a tab to a group | Drag it onto one of the group's tabs (it lands there) or onto the group's header (it becomes the first tab). |
-| Take a tab out of its group | Drag it next to a tab outside the group, or onto the empty space below the list. |
-| Move a group | Drag its header. |
-| Rename, recolor, close, ungroup or delete | Right-click the group's header, or hover it and click **⋮** (or press F2 on it), like in Chrome: type a name, pick a color, or choose an action. |
-| Reopen a closed group | Click it under **Closed groups**. |
+| Open / close a tab | Click it / click **×** |
+| Collapse a group | Click its header |
+| Select several | Ctrl+click or Shift+click |
+| Group a tab | Drag it onto a group |
+| Edit a group | Right-click its header, or press F2 |
+| Reopen a closed group | Click it under **Closed groups** |
 
-While you drag, the drop line shows what will happen: the group's color when the tab will join it, red when it will leave its group. With several editor groups (split editors), each one gets its own list, and tabs move within their own list. You can drag the view to the secondary side bar too.
+</details>
 
-### Keyboard shortcuts
+<details>
+<summary><b>⌨️ Shortcuts</b></summary>
 
-| Shortcut | Command |
+| Keys (macOS: `Cmd`) | Action |
 |---|---|
-| `Ctrl+Alt+G` (`Cmd+Alt+G` on macOS) | Add the current tab, or the selected tabs, to a group |
-| `Ctrl+Alt+Shift+W` (`Cmd+Alt+Shift+W`) | Close the current tab's group |
-| `Ctrl+Alt+T` (`Cmd+Alt+T`) | Show Tab Groups: all groups in this workspace, including closed ones |
+| `Ctrl+Alt+G` | Add tab to a group |
+| `Ctrl+Alt+Shift+W` | Close the tab's group |
+| `Ctrl+Alt+T` | Show all groups |
 
-Every action is also in the Command Palette under **Tab Groups:**.
+</details>
 
-## Settings
+<details>
+<summary><b>⚙️ Settings</b></summary>
 
-Open **Settings** and search for **TabPalette**. Changes apply at once, with no reload.
+Search **TabPalette** in Settings. Changes apply at once.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `tabPalette.tabBar.activeTabOutline` | `true` | Chrome's rounded outline, in the group color, around a group's active tab. When off, the active tab keeps VS Code's own style and the group line runs under it. |
-| `tabPalette.tabBar.chipMaxWidth` | `160` | The widest a group chip on the tab bar can get, in pixels (40 to 400). A longer name ends in "…". |
-| `tabPalette.groupColors.color1` … `color9` | Chrome's grey, blue, red, yellow, green, pink, purple, cyan and orange | The nine group colors, as hex colors. Each applies everywhere its groups show: the chip, the group line, the active tab's outline, the group editor, the side bar and the Command Palette pickers. New groups take the next unused color. |
-| `tabPalette.ungroupDropLineColor` | red | The drop line while dragging a tab, when releasing it would take the tab out of its group. |
+| `tabPalette.tabBar.activeTabOutline` | on | Outline around the active tab |
+| `tabPalette.tabBar.chipMaxWidth` | 160 | Widest a chip can get (40–400 px) |
+| `tabPalette.groupColors.color1` … `color9` | Chrome's colors | The nine group colors |
+| `tabPalette.ungroupDropLineColor` | red | Drop line when a tab leaves its group |
 
-Each color field shows its default for dark themes. While you leave a color unchanged, light themes keep their own default.
+</details>
 
-## How it draws on the tab bar
+<details>
+<summary><b>❓ FAQ</b></summary>
 
-VS Code's extension API cannot draw on the tab bar. To show chips and group lines, TabPalette adds one small script to VS Code's own UI file, `workbench.html`. It asks before doing so, and you can undo it at any time.
+**Why does it ask to Enable?**  
+VS Code extensions can't draw on the tab bar, so TabPalette adds a small script to VS Code. You can undo it any time.
 
-- **"Your Code installation appears to be corrupt."** VS Code shows this after any change to its files. It is expected; choose **Don't Show Again**.
-- **VS Code updates** replace the file. On the next start, TabPalette offers to add the script again.
-- **Tab bar not showing the latest version?** After an update, run **Tab Groups: Reload Tab Bar Script** from the Command Palette. It writes the script again and reloads the window.
-- **Permissions.** If VS Code is installed for all users (for example under *Program Files*), run VS Code as administrator once to enable or disable. Per-user installs don't need this.
+**VS Code says it is "corrupt".**  
+Expected after the script is added. Choose **Don't Show Again**.
 
-Without the script, groups still work from the context menus and the Command Palette, but nothing is drawn on the tab bar.
+**Groups are gone from the tab bar after a VS Code update.**  
+Click **Enable** again when asked.
 
-**Privacy and security.** TabPalette never changes your settings and sends nothing over the network. The script talks to the extension through a WebSocket on `127.0.0.1` only. That socket accepts only VS Code's own window origin, and only with a random token that is created for each session.
+**How do I uninstall?**  
+Run **Tab Groups: Disable Chrome-style Tab Groups** first, then uninstall.
 
-## Uninstalling
+**Is it safe?**  
+It sends nothing over the network and never changes your settings.
 
-Before you uninstall, run **Tab Groups: Disable Chrome-style Tab Groups** from the Command Palette. It removes the script and restores VS Code's original file exactly. Then reload the window and uninstall the extension.
+**Limits?**  
+Desktop only. Tabs without a file (like Git Graph) are grouped by title.
 
-## Known limitations
-
-- Tabs that show no file (Git Graph, Claude Code, Keyboard Shortcuts, terminals…) can be grouped, with some limits. They are known by their title, so one renamed after a reload is no longer in its group. "Close group" closes them for good: reopening the group opens only its files. "Move group to new window" only moves them when one is the group's first tab. On the tab bar, a grouped one shows "Add Tab to Group…" instead of the Tab Group submenu; its picker has "Remove from group".
-- Works in VS Code desktop only, not in VS Code for the Web or in Codespaces in the browser.
+</details>
 
 ## Feedback
 
-Found a bug or have an idea? [Open an issue](https://github.com/JJLIM00/TabPalette/issues). Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
-
-[MIT](LICENSE)
+[Report a bug](https://github.com/JJLIM00/TabPalette/issues) · [Contributing](CONTRIBUTING.md) · [MIT License](LICENSE)
