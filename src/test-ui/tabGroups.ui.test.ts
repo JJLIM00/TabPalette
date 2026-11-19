@@ -677,6 +677,39 @@ suite('TabPalette — used like a person would', function () {
       await vscode.dragChip('Main', 'end');
       assert.deepStrictEqual(await vscode.tabNames(), ['c.txt', 'd.txt', 'a.txt', 'b.txt']);
     });
+
+    test('on a tab bar that wraps onto several lines, a dragged chip drops on the line under the pointer', async () => {
+      // Wide tabs, so the four tabs take more than one line.
+      const wrap = {
+        'workbench.editor.wrapTabs': true,
+        'workbench.editor.tabSizing': 'fixed',
+        'workbench.editor.tabSizingFixedMinWidth': 400,
+        'workbench.editor.tabSizingFixedMaxWidth': 400,
+      };
+      try {
+        for (const [key, value] of Object.entries(wrap)) {
+          await vscode.setUserSetting(key, value);
+        }
+        await vscode.closeAllTabs(); // reopened, the tabs take the new width
+        for (const file of ['a.txt', 'b.txt', 'c.txt', 'd.txt']) {
+          await vscode.open(file);
+        }
+        await makeGroup('Work', ['a.txt']);
+        await vscode.waitUntil('the tab bar wraps: d.txt is on a lower line than a.txt', async () => {
+          const [a, d] = [await vscode.tabBox('a.txt'), await vscode.tabBox('d.txt')];
+          return d.y > a.y + a.height / 2;
+        });
+        const d = await vscode.tabBox('d.txt');
+        const line = await vscode.dragChip('Work', { before: 'd.txt' });
+        assert.ok(line, 'a drop line is shown');
+        assert.ok(line.top >= d.y && line.top + line.height <= d.y + d.height, `the drop line spans only d.txt's line (${JSON.stringify(line)}, d.txt ${JSON.stringify(d)})`);
+        assert.deepStrictEqual(await vscode.tabNames(), ['b.txt', 'c.txt', 'a.txt', 'd.txt']);
+      } finally {
+        for (const key of Object.keys(wrap)) {
+          await vscode.setUserSetting(key, undefined);
+        }
+      }
+    });
   });
 
   // ------------------------------------------------------------------ group editor menu

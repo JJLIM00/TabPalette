@@ -518,7 +518,7 @@
       }
       e.preventDefault();
       e.stopPropagation();
-      press.target = dropTarget(press, e.clientX);
+      press.target = dropTarget(press, e.clientX, e.clientY);
       showIndicator(press.target);
     }
 
@@ -544,7 +544,7 @@
     }
 
     /** Nearest gap between tabs where the group may land (never inside a group). */
-    function dropTarget(p, x) {
+    function dropTarget(p, x, y) {
       var container = p.chip.closest('.tabs-container');
       if (!container || container.dataset.tgRow === undefined) {
         return null;
@@ -564,26 +564,42 @@
         var chip = t.querySelector(':scope > .tg-chip');
         return chip ? chip.getBoundingClientRect().left - 6 : t.getBoundingClientRect().left;
       };
-      var end = 0;
-      tabs.forEach(function (t) {
-        if (shown(t)) {
-          end = Math.max(end, t.getBoundingClientRect().right);
-        }
-      });
+      // The tab bar may wrap onto several lines (workbench.editor.wrapTabs): the nearest gap is the
+      // one on the pointer's line, and the drop line spans only that line. A gap where the bar
+      // wraps can be shown at the end of the upper line or at the start of the lower one.
+      // Right edge of a tab, including the chip of a collapsed group (whose tab has no width).
+      var rightEdge = function (t) {
+        var chip = t.querySelector(':scope > .tg-chip');
+        return Math.max(t.getBoundingClientRect().right, chip ? chip.getBoundingClientRect().right : -Infinity);
+      };
       var best = null;
+      var consider = function (index, gapX, line) {
+        var dy = y < line.top ? line.top - y : y > line.bottom ? y - line.bottom : 0;
+        var d = dy * 10000 + Math.abs(gapX - x);
+        if (!best || d < best.d) {
+          best = { row: +container.dataset.tgRow, index: offset + index, x: gapX, d: d, rect: { top: line.top, height: line.height } };
+        }
+      };
+      var last = null; // last shown tab before the gap
       for (var i = 0; i <= tabs.length; i++) {
-        if (i < tabs.length && !shown(tabs[i])) {
+        var next = i < tabs.length ? tabs[i] : null;
+        if (next && !shown(next)) {
           continue; // hidden tab of a collapsed group
         }
-        var prev = i > 0 ? gids[i - 1] : '';
-        var next = i < tabs.length ? gids[i] : '';
-        if (prev && prev === next) {
-          continue; // inside a group (another one, or its own)
+        var prevGid = i > 0 ? gids[i - 1] : '';
+        if (!(prevGid && next && prevGid === gids[i])) {
+          // not inside a group (another one, or its own)
+          var nextLine = next ? next.getBoundingClientRect() : null;
+          var lastLine = last ? last.getBoundingClientRect() : null;
+          if (next) {
+            consider(i, leftEdge(next), nextLine);
+          }
+          if (lastLine && (!nextLine || Math.abs(lastLine.top - nextLine.top) > 1)) {
+            consider(i, rightEdge(last), lastLine);
+          }
         }
-        var gapX = i < tabs.length ? leftEdge(tabs[i]) : end;
-        var d = Math.abs(gapX - x);
-        if (!best || d < best.d) {
-          best = { row: +container.dataset.tgRow, index: offset + i, x: gapX, d: d, rect: container.getBoundingClientRect() };
+        if (next) {
+          last = next;
         }
       }
       return best;

@@ -501,24 +501,34 @@ export class VSCodeWindow {
     });
   }
 
+  /** Where a tab is on screen. */
+  async tabBox(name: string): Promise<{ x: number; y: number; width: number; height: number }> {
+    return (await this.tabLocator(name).boundingBox())!;
+  }
+
   /** Left edge of a group's chip, as an x position. */
   async chipLeft(group: string): Promise<number> {
     return (await this.chipLocator(group).boundingBox())!.x;
   }
 
-  /** Drags a group chip with the mouse and drops it just before tab `before` (or after the last tab). */
-  async dragChip(group: string, to: { before: string } | 'end'): Promise<void> {
+  /**
+   * Drags a group chip with the mouse and drops it just before tab `before` (or after the last tab),
+   * on that tab's line when the tab bar wraps. Returns where the drop line was just before the drop.
+   */
+  async dragChip(group: string, to: { before: string } | 'end'): Promise<{ left: number; top: number; height: number } | null> {
     const from = await this.chipLocator(group).boundingBox();
     if (!from) {
       throw new Error('chip not found');
     }
     let x: number;
+    let target: { x: number; y: number; height: number } | null;
     if (to === 'end') {
       const tabs = await this.page.locator('.editor-group-container.active .tabs-container > .tab').all();
       const last = await tabs[tabs.length - 1].boundingBox();
       x = last!.x + last!.width + 4;
+      target = last;
     } else {
-      const target = await this.tabLocator(to.before).boundingBox();
+      target = await this.tabLocator(to.before).boundingBox();
       const chip = await this.page.evaluate((name) => {
         const tab = [...document.querySelectorAll('.tabs-container > .tab')].find((t) => t.querySelector('.label-name')?.textContent === name);
         const c = tab?.querySelector(':scope > .tg-chip');
@@ -530,9 +540,14 @@ export class VSCodeWindow {
     await this.page.mouse.move(from.x + from.width / 2, y);
     await this.page.mouse.down();
     await this.page.mouse.move(from.x + from.width / 2 + 12, y, { steps: 4 });
-    await this.page.mouse.move(x, y, { steps: 15 });
+    await this.page.mouse.move(x, target!.y + target!.height / 2, { steps: 15 });
+    const line = await this.page.evaluate(() => {
+      const r = document.querySelector('.tg-drop')?.getBoundingClientRect();
+      return r ? { left: r.left, top: r.top, height: r.height } : null;
+    });
     await this.page.mouse.up();
     await this.settled(400); // the extension moves the group's tabs one by one
+    return line;
   }
 
   /**
