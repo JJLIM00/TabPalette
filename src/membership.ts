@@ -83,6 +83,8 @@ export class MembershipTracker implements vscode.Disposable {
    * for every tab when they redraw, and each answer counts the group's tabs in every row.
    */
   private readonly resolved = new Map<string, vscode.TabGroup | undefined>();
+  /** The tab of each group that was active last (by group id). */
+  private readonly lastActive = new Map<string, string>();
 
   constructor(
     private readonly store: GroupStore,
@@ -154,6 +156,11 @@ export class MembershipTracker implements vscode.Disposable {
       this.homes.delete(groupId);
     }
     return best;
+  }
+
+  /** The tab of a group that was active last ("Go to Group" opens it again). */
+  lastActiveIn(groupId: string): string | undefined {
+    return this.lastActive.get(groupId);
   }
 
   /** The group of the tab with this URI in this tab row: none outside the group's home row. */
@@ -246,6 +253,9 @@ export class MembershipTracker implements vscode.Disposable {
     const active = activeRow.activeTab;
     const uri = active ? tabUri(active).toString() : undefined;
     const g = uri ? this.groupIn(activeRow, uri) : undefined;
+    if (g && uri) {
+      this.lastActive.set(g.id, uri);
+    }
     if (g?.collapsed && this.suspended === 0) {
       this.store.setCollapsed(g.id, false);
     }

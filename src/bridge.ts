@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { WebSocket, WebSocketServer } from 'ws';
 import { TabGroup } from './model';
 import { DEFAULT_SETTINGS, Settings } from './settings';
+import type { ChipShortcuts } from './shortcuts';
 import { pageText, t } from './text';
 import { GroupStore } from './store';
 import { isOtherTab, tabUri } from './tabs';
@@ -38,6 +39,8 @@ export interface UiState {
   rows: { tabs: { label: string; group: string | null; other?: true }[] }[];
   /** How the tab bar draws the groups (the user's settings). */
   settings: Settings;
+  /** The keys of "Go to Group N" for the chips; null when they are not shown. */
+  shortcuts: ChipShortcuts | null;
 }
 
 /** The biggest tab icon (characters of its data: URL) taken from the tab bar. */
@@ -60,6 +63,7 @@ export function buildState(
   rows: readonly vscode.TabGroup[],
   groupIn: (row: vscode.TabGroup, uri: string) => TabGroup | undefined = (_, uri) => store.groupOf(uri),
   settings: Settings = DEFAULT_SETTINGS,
+  shortcuts: ChipShortcuts | null = null,
 ): UiState {
   return {
     type: 'state',
@@ -74,6 +78,7 @@ export function buildState(
       }),
     })),
     settings,
+    shortcuts: settings.groupShortcuts ? shortcuts : null,
   };
 }
 
@@ -91,8 +96,10 @@ export class Bridge implements vscode.Disposable {
   /** The icons of the tabs that show no file, per tab row (by position in the row). */
   private tabIcons = new Map<number, (TabBarIcon | null)[]>();
   private readonly iconsBy = new Map<WebSocket, Map<number, (TabBarIcon | null)[]>>();
+  /** The windows whose tab bar shows the group keys (their modifier keys are held). */
+  private readonly keysShownBy = new Set<WebSocket>();
   private readonly reportEmitter = new vscode.EventEmitter<void>();
-  /** The tab bar reported a new selection (see selectedIndexes) or new icons (see tabIcon). */
+  /** The tab bar reported a new selection (see selectedIndexes), new icons (see tabIcon) or shown keys (see groupKeys). */
   readonly onDidChangeReport = this.reportEmitter.event;
 
   constructor(
@@ -103,6 +110,8 @@ export class Bridge implements vscode.Disposable {
     private readonly groupIn?: (row: vscode.TabGroup, uri: string) => TabGroup | undefined,
     /** The user's settings, sent with the state (call schedule() when they change). */
     private readonly settings: () => Settings = () => DEFAULT_SETTINGS,
+    /** The keys of "Go to Group N" (call schedule() when they change). */
+    private readonly shortcuts: () => ChipShortcuts | null = () => null,
   ) {}
 
   get port(): number | undefined {
@@ -151,6 +160,15 @@ export class Bridge implements vscode.Disposable {
    */
   tabIcon(row: number, index: number): TabBarIcon | undefined {
     return this.tabIcons.get(row)?.[index] ?? undefined;
+  }
+
+  /**
+   * The keys of "Go to Group N" (index N-1) while a tab bar shows them on its chips, so the side
+   * bar can show them on its group headers too; null otherwise.
+   */
+  groupKeys(): (string | null)[] | null {
+    const shortcuts = this.settings().groupShortcuts ? this.shortcuts() : null;
+    return shortcuts && this.keysShownBy.size > 0 ? shortcuts.labels : null;
   }
 
   /** Positions of the tabs selected in the tab bar in tab row `row` (the active tab counts as selected). */
@@ -219,7 +237,7 @@ export class Bridge implements vscode.Disposable {
         clearTimeout(timeout);
         this.clients.add(socket);
         socket.send(JSON.stringify({ type: 'text', text: pageText() }));
-        socket.send(JSON.stringify(buildState(this.store, this.rows(), this.groupIn, this.settings())));
+        socket.send(JSON.stringify(buildState(this.store, this.rows(), this.groupIn, this.settings(), this.shortcuts())));
         return;
       }
       if (msg.type === 'tabSelection') {
@@ -248,6 +266,18 @@ export class Bridge implements vscode.Disposable {
         this.mergeIcons();
         return;
       }
+      if (msg.type === 'keysShown') {
+        const before = this.keysShownBy.size;
+        if ((msg as { shown?: unknown }).shown === true) {
+          this.keysShownBy.add(socket);
+        } else {
+          this.keysShownBy.delete(socket);
+        }
+        if (this.keysShownBy.size !== before) {
+          this.reportEmitter.fire();
+        }
+        return;
+      }
       if (msg.type === 'action' && typeof msg.action === 'string' && typeof msg.groupId === 'string') {
         try {
           void Promise.resolve(this.onAction(msg as UiAction)).catch((err) => console.error('[TabPalette] action failed', err));
@@ -264,6 +294,9 @@ export class Bridge implements vscode.Disposable {
       }
       if (this.iconsBy.delete(socket)) {
         this.mergeIcons();
+      }
+      if (this.keysShownBy.delete(socket)) {
+        this.reportEmitter.fire();
       }
     });
     socket.on('error', () => socket.close());
@@ -298,7 +331,7 @@ export class Bridge implements vscode.Disposable {
     if (this.clients.size === 0) {
       return;
     }
-    const message = JSON.stringify(buildState(this.store, this.rows(), this.groupIn, this.settings()));
+    const message = JSON.stringify(buildState(this.store, this.rows(), this.groupIn, this.settings(), this.shortcuts()));
     if (message !== this.lastState) {
       this.lastState = message;
       this.sendAll(message);

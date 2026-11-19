@@ -289,6 +289,22 @@ body::-webkit-scrollbar-thumb:active {
   opacity: 0.85;
 }
 
+/* the group's key while its modifier keys are held: a badge like the one on the tab bar chips */
+.key {
+  flex: none;
+  box-sizing: border-box;
+  min-width: 15px;
+  height: 15px;
+  line-height: 15px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--header-fg);
+  color: var(--group-color);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .chevron {
   flex: none;
   width: 16px;

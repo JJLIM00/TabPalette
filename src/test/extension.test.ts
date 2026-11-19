@@ -12,6 +12,7 @@ import { BRIDGE_LABEL_PREFIX, WORKBENCH_ORIGIN } from '../bridge';
 import type { TabGroupsApi } from '../extension';
 import { GROUP_COLORS, GroupColor, TabGroup } from '../model';
 import { DEFAULT_SETTINGS, SETTINGS_SECTION, Settings } from '../settings';
+import { ChipShortcuts, GO_TO_GROUP_COMMANDS, defaultGoToKey, formatKey } from '../shortcuts';
 import { matchCopiedPaths, openUris, selectedTabUris, tabUri } from '../tabs';
 
 // ---------------------------------------------------------------- helpers
@@ -68,7 +69,7 @@ function run(command: string, ...args: unknown[]): Thenable<unknown> {
 }
 
 /** The settings these tests change (in the test instance's own user settings). */
-const TEST_SETTINGS = ['tabBar.activeTabOutline', 'tabBar.chipMaxWidth', 'tabBar.chipTabCount', 'ungroupDropLineColor', ...GROUP_COLORS.map((c) => `groupColors.${c}`)];
+const TEST_SETTINGS = ['tabBar.activeTabOutline', 'tabBar.chipMaxWidth', 'tabBar.chipTabCount', 'keyboard.showGroupShortcuts', 'ungroupDropLineColor', ...GROUP_COLORS.map((c) => `groupColors.${c}`)];
 
 async function setSettings(values: Record<string, unknown>): Promise<void> {
   const config = vscode.workspace.getConfiguration(SETTINGS_SECTION);
@@ -187,6 +188,16 @@ suite('TabPalette in a real VS Code window', () => {
       assert.deepStrictEqual(prompts.shownPicks[0], ['New group', 'Main']);
       assert.deepStrictEqual(members(main), ['a.txt', 'd.txt']);
       assert.deepStrictEqual(tabBar(), ['a.txt', 'd.txt', 'b.txt', 'c.txt'], 'd moved next to its group');
+    });
+
+    test('"Add Tab to Group…" lists the group used last first, so Enter adds to it again', async () => {
+      makeGroup('Main', 'color2', ['a.txt']);
+      makeGroup('Work', 'color3', ['b.txt']);
+      answerPrompts({ pick: ['Work'] }); // then Esc
+      await run('tabPalette.addToGroup', fileUri('c.txt'));
+      await settle();
+      await run('tabPalette.addToGroup', fileUri('d.txt'));
+      assert.deepStrictEqual(prompts.shownPicks[1], ['Work', 'New group', 'Main']);
     });
 
     test('several selected files go into one new group, side by side', async () => {
@@ -565,6 +576,37 @@ suite('TabPalette in a real VS Code window', () => {
       assert.strictEqual(tabBar().length, 5);
     });
 
+    test('"Go to Group N" opens group N of the tab row at its tab used last, expanding it; a missing group does nothing', async () => {
+      const main = makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
+      makeGroup('Work', 'color3', ['c.txt', 'd.txt']);
+      await open('b.txt');
+      await open('d.txt');
+      await run('tabPalette.toggleCollapse', main.id);
+      await settle();
+      await run('tabPalette.goToGroup1');
+      await waitFor('Main is shown at b.txt, its tab used last', () => activeTab() === 'b.txt');
+      assert.strictEqual(group(main)!.collapsed, false, 'the collapsed group is expanded');
+      await run('tabPalette.goToGroup2');
+      await waitFor('Work is shown at d.txt', () => activeTab() === 'd.txt');
+      await run('tabPalette.goToGroup3');
+      await settle();
+      assert.strictEqual(activeTab(), 'd.txt', 'there is no group 3');
+    });
+
+    test('"Next Group" and "Previous Group" go round the groups of the tab row', async () => {
+      makeGroup('Main', 'color2', ['a.txt', 'b.txt']);
+      makeGroup('Work', 'color3', ['c.txt']);
+      await open('d.txt'); // in no group: next is the first group
+      const go = async (command: string, tab: string) => {
+        await run(command);
+        await waitFor(`${command} shows ${tab}`, () => activeTab() === tab);
+      };
+      await go('tabPalette.nextGroup', 'a.txt');
+      await go('tabPalette.nextGroup', 'c.txt');
+      await go('tabPalette.nextGroup', 'a.txt');
+      await go('tabPalette.previousGroup', 'c.txt');
+    });
+
     test('opening a hidden tab (Quick Open, Explorer…) expands its collapsed group', async () => {
       const g = makeGroup('Main', 'color3', ['a.txt', 'b.txt']);
       await run('tabPalette.toggleCollapse', g.id);
@@ -940,8 +982,14 @@ suite('TabPalette in a real VS Code window', () => {
 
     test('sends the settings with the state, and a fresh state when a setting changes', async () => {
       makeGroup('Main', 'color2', ['a.txt']);
-      const first = (await connectAsTabBar()) as unknown as { settings: Settings };
+      const first = (await connectAsTabBar()) as unknown as { settings: Settings; shortcuts: ChipShortcuts | null };
       assert.deepStrictEqual(first.settings, DEFAULT_SETTINGS);
+      const platform = process.platform === 'darwin' || process.platform === 'linux' ? process.platform : 'win32';
+      assert.deepStrictEqual(
+        first.shortcuts?.labels,
+        GO_TO_GROUP_COMMANDS.map((_, i) => formatKey(defaultGoToKey(platform, i + 1), platform)),
+        'the chips get the keys of Go to Group 1…9',
+      );
       let last = first.settings;
       ui!.on('message', (data: Buffer) => {
         const msg = JSON.parse(data.toString()) as Message;
@@ -951,7 +999,7 @@ suite('TabPalette in a real VS Code window', () => {
       });
       try {
         await setSettings({ 'tabBar.activeTabOutline': false, 'tabBar.chipMaxWidth': 90, 'tabBar.chipTabCount': 'always', 'groupColors.color2': '#123456', ungroupDropLineColor: '#00ff00' });
-        const wanted = { activeTabOutline: false, chipMaxWidth: 90, chipTabCount: 'always', colors: { color2: '#123456' }, ungroupDropLine: '#00ff00' };
+        const wanted = { activeTabOutline: false, chipMaxWidth: 90, chipTabCount: 'always', groupShortcuts: true, colors: { color2: '#123456' }, ungroupDropLine: '#00ff00' };
         await waitFor('the new settings reach the tab bar', () => JSON.stringify(last) === JSON.stringify(wanted));
       } finally {
         await resetSettings();
@@ -1122,6 +1170,21 @@ suite('TabPalette in a real VS Code window', () => {
       ui!.close();
       await waitFor('the selection is dropped with the tab bar', () => !api.sidebar.state().selectionSync);
       assert.ok(api.sidebar.state().rows[0].tabs.every((t) => !t.selected));
+    });
+
+    test('the side bar shows the group keys while the tab bar shows them', async () => {
+      await connectAsTabBar();
+      assert.strictEqual(api.sidebar.state().groupKeys, undefined);
+      ui!.send(JSON.stringify({ type: 'keysShown', shown: true }));
+      await waitFor('the side bar has the keys', () => !!api.sidebar.state().groupKeys);
+      const first = process.platform === 'darwin' ? '⌃1' : process.platform === 'linux' ? 'Ctrl+Alt+1' : 'Alt+1';
+      assert.strictEqual(api.sidebar.state().groupKeys![0], first);
+      ui!.send(JSON.stringify({ type: 'keysShown', shown: false }));
+      await waitFor('the keys are gone when let go', () => !api.sidebar.state().groupKeys);
+      ui!.send(JSON.stringify({ type: 'keysShown', shown: true }));
+      await waitFor('the side bar has the keys again', () => !!api.sidebar.state().groupKeys);
+      ui!.close();
+      await waitFor('the keys go with the tab bar', () => !api.sidebar.state().groupKeys);
     });
 
     test('the side bar shows the icons the tab bar reports for tabs that show no file (Git Graph, Claude Code…)', async () => {

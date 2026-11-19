@@ -29,6 +29,11 @@ export interface SidebarState {
   colors: Settings['colors'];
   /** The drop line's color set in the settings, when a dropped tab would leave its group. */
   ungroupDropLine?: string;
+  /**
+   * While the tab bar shows the group keys (their modifier keys are held): the key of the Nth
+   * group of a row at index N-1, shown on its header like on the chips.
+   */
+  groupKeys?: (string | null)[];
 }
 
 export interface SidebarRow {
@@ -206,7 +211,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
       count: g.uris.length,
     }));
     const fonts = webview ? this.icons.fonts(webview) : [];
-    return { rows, groups, selectionSync, fonts: codiconFont ? [...fonts, codiconFont] : fonts, colors: this.settings().colors, ungroupDropLine: this.settings().ungroupDropLine };
+    const groupKeys = selectionSync ? bridge!.groupKeys() ?? undefined : undefined;
+    return { rows, groups, selectionSync, fonts: codiconFont ? [...fonts, codiconFont] : fonts, colors: this.settings().colors, ungroupDropLine: this.settings().ungroupDropLine, groupKeys };
   }
 
   /** Handles a message from the page (public for the integration tests). */

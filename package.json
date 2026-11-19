@@ -126,6 +126,61 @@
         "category": "%category%"
       },
       {
+        "command": "tabPalette.goToGroup1",
+        "title": "%command.goToGroup1%",
+        "category": "%category%"
+      },
+      {
+        "command": "tabPalette.goToGroup2",
+        "title": "%command.goToGroup2%",
+        "category": "%category%"
+      },
+      {
+        "command": "tabPalette.goToGroup3",
+        "title": "%command.goToGroup3%",
+        "category": "%category%"
+      },
+      {
+        "command": "tabPalette.goToGroup4",
+        "title": "%command.goToGroup4%",
+        "category": "%category%"
+      },
+      {
+        "command": "tabPalette.goToGroup5",
+        "title": "%command.goToGroup5%",
+        "category": "%category%"
+      },
+      {
+        "command": "tabPalette.goToGroup6",
+        "title": "%command.goToGroup6%",
+        "category": "%category%"
+      },
+      {
+        "command": "tabPalette.goToGroup7",
+        "title": "%command.goToGroup7%",
+        "category": "%category%"
+      },
+      {
+        "command": "tabPalette.goToGroup8",
+        "title": "%command.goToGroup8%",
+        "category": "%category%"
+      },
+      {
+        "command": "tabPalette.goToGroup9",
+        "title": "%command.goToGroup9%",
+        "category": "%category%"
+      },
+      {
+        "command": "tabPalette.nextGroup",
+        "title": "%command.nextGroup%",
+        "category": "%category%"
+      },
+      {
+        "command": "tabPalette.previousGroup",
+        "title": "%command.previousGroup%",
+        "category": "%category%"
+      },
+      {
         "command": "tabPalette.showMenu",
         "title": "%command.showMenu%",
         "category": "%category%"
@@ -526,6 +581,95 @@
         "command": "tabPalette.showMenu",
         "key": "ctrl+alt+t",
         "mac": "cmd+alt+t"
+      },
+      {
+        "command": "tabPalette.goToGroup1",
+        "key": "alt+1",
+        "win": "alt+1",
+        "mac": "ctrl+1",
+        "linux": "ctrl+alt+1"
+      },
+      {
+        "command": "tabPalette.goToGroup2",
+        "key": "alt+2",
+        "win": "alt+2",
+        "mac": "ctrl+2",
+        "linux": "ctrl+alt+2"
+      },
+      {
+        "command": "tabPalette.goToGroup3",
+        "key": "alt+3",
+        "win": "alt+3",
+        "mac": "ctrl+3",
+        "linux": "ctrl+alt+3"
+      },
+      {
+        "command": "tabPalette.goToGroup4",
+        "key": "alt+4",
+        "win": "alt+4",
+        "mac": "ctrl+4",
+        "linux": "ctrl+alt+4"
+      },
+      {
+        "command": "tabPalette.goToGroup5",
+        "key": "alt+5",
+        "win": "alt+5",
+        "mac": "ctrl+5",
+        "linux": "ctrl+alt+5"
+      },
+      {
+        "command": "tabPalette.goToGroup6",
+        "key": "alt+6",
+        "win": "alt+6",
+        "mac": "ctrl+6",
+        "linux": "ctrl+alt+6"
+      },
+      {
+        "command": "tabPalette.goToGroup7",
+        "key": "alt+7",
+        "win": "alt+7",
+        "mac": "ctrl+7",
+        "linux": "ctrl+alt+7"
+      },
+      {
+        "command": "tabPalette.goToGroup8",
+        "key": "alt+8",
+        "win": "alt+8",
+        "mac": "ctrl+8",
+        "linux": "ctrl+alt+8"
+      },
+      {
+        "command": "tabPalette.goToGroup9",
+        "key": "alt+9",
+        "win": "alt+9",
+        "mac": "ctrl+9",
+        "linux": "ctrl+alt+9"
+      },
+      {
+        "command": "tabPalette.nextGroup",
+        "key": "ctrl+alt+]",
+        "mac": "ctrl+cmd+]"
+      },
+      {
+        "command": "tabPalette.previousGroup",
+        "key": "ctrl+alt+[",
+        "mac": "ctrl+cmd+["
+      },
+      {
+        "command": "tabPalette.toggleCollapse",
+        "key": "ctrl+alt+c",
+        "mac": "ctrl+cmd+c"
+      },
+      {
+        "command": "tabPalette.addToNewGroup",
+        "key": "ctrl+alt+n",
+        "mac": "ctrl+cmd+n"
+      },
+      {
+        "command": "tabPalette.addSelectedToNewGroup",
+        "key": "ctrl+alt+n",
+        "mac": "ctrl+cmd+n",
+        "when": "multipleEditorsSelectedInGroup"
       }
     ],
     "colors": [
@@ -630,111 +774,141 @@
         }
       }
     ],
-    "configuration": {
-      "title": "%configuration.title%",
-      "properties": {
-        "tabPalette.tabBar.activeTabOutline": {
-          "type": "boolean",
-          "default": true,
-          "order": 1,
-          "markdownDescription": "%setting.tabBar.activeTabOutline%"
-        },
-        "tabPalette.tabBar.chipMaxWidth": {
-          "type": "number",
-          "default": 160,
-          "minimum": 40,
-          "maximum": 400,
-          "order": 2,
-          "markdownDescription": "%setting.tabBar.chipMaxWidth%"
-        },
-        "tabPalette.tabBar.chipTabCount": {
-          "type": "string",
-          "enum": [
-            "off",
-            "collapsed",
-            "always"
-          ],
-          "enumDescriptions": [
-            "%setting.tabBar.chipTabCount.off%",
-            "%setting.tabBar.chipTabCount.collapsed%",
-            "%setting.tabBar.chipTabCount.always%"
-          ],
-          "default": "off",
-          "order": 3,
-          "markdownDescription": "%setting.tabBar.chipTabCount%"
-        },
-        "tabPalette.groupColors.color1": {
-          "type": "string",
-          "default": "#DADCE0",
-          "format": "color-hex",
-          "order": 10,
-          "markdownDescription": "%setting.groupColors.color1%"
-        },
-        "tabPalette.groupColors.color2": {
-          "type": "string",
-          "default": "#8AB4F8",
-          "format": "color-hex",
-          "order": 11,
-          "markdownDescription": "%setting.groupColors.color2%"
-        },
-        "tabPalette.groupColors.color3": {
-          "type": "string",
-          "default": "#F28B82",
-          "format": "color-hex",
-          "order": 12,
-          "markdownDescription": "%setting.groupColors.color3%"
-        },
-        "tabPalette.groupColors.color4": {
-          "type": "string",
-          "default": "#FDD663",
-          "format": "color-hex",
-          "order": 13,
-          "markdownDescription": "%setting.groupColors.color4%"
-        },
-        "tabPalette.groupColors.color5": {
-          "type": "string",
-          "default": "#81C995",
-          "format": "color-hex",
-          "order": 14,
-          "markdownDescription": "%setting.groupColors.color5%"
-        },
-        "tabPalette.groupColors.color6": {
-          "type": "string",
-          "default": "#FF8BCB",
-          "format": "color-hex",
-          "order": 15,
-          "markdownDescription": "%setting.groupColors.color6%"
-        },
-        "tabPalette.groupColors.color7": {
-          "type": "string",
-          "default": "#C58AF9",
-          "format": "color-hex",
-          "order": 16,
-          "markdownDescription": "%setting.groupColors.color7%"
-        },
-        "tabPalette.groupColors.color8": {
-          "type": "string",
-          "default": "#78D9EC",
-          "format": "color-hex",
-          "order": 17,
-          "markdownDescription": "%setting.groupColors.color8%"
-        },
-        "tabPalette.groupColors.color9": {
-          "type": "string",
-          "default": "#FCAD70",
-          "format": "color-hex",
-          "order": 18,
-          "markdownDescription": "%setting.groupColors.color9%"
-        },
-        "tabPalette.ungroupDropLineColor": {
-          "type": "string",
-          "default": "#F14C4C",
-          "format": "color-hex",
-          "order": 19,
-          "markdownDescription": "%setting.ungroupDropLineColor%"
+    "configuration": [
+      {
+        "id": "tabPalette.tabBar",
+        "title": "%configuration.tabBar%",
+        "order": 1,
+        "properties": {
+          "tabPalette.tabBar.activeTabOutline": {
+            "type": "boolean",
+            "default": true,
+            "order": 1,
+            "markdownDescription": "%setting.tabBar.activeTabOutline%"
+          },
+          "tabPalette.tabBar.chipMaxWidth": {
+            "type": "number",
+            "default": 160,
+            "minimum": 40,
+            "maximum": 400,
+            "order": 2,
+            "markdownDescription": "%setting.tabBar.chipMaxWidth%"
+          },
+          "tabPalette.tabBar.chipTabCount": {
+            "type": "string",
+            "enum": [
+              "off",
+              "collapsed",
+              "always"
+            ],
+            "enumDescriptions": [
+              "%setting.tabBar.chipTabCount.off%",
+              "%setting.tabBar.chipTabCount.collapsed%",
+              "%setting.tabBar.chipTabCount.always%"
+            ],
+            "default": "off",
+            "order": 3,
+            "markdownDescription": "%setting.tabBar.chipTabCount%"
+          }
+        }
+      },
+      {
+        "id": "tabPalette.colors",
+        "title": "%configuration.colors%",
+        "order": 2,
+        "properties": {
+          "tabPalette.groupColors.color1": {
+            "type": "string",
+            "default": "#DADCE0",
+            "format": "color-hex",
+            "order": 10,
+            "markdownDescription": "%setting.groupColors.color1%"
+          },
+          "tabPalette.groupColors.color2": {
+            "type": "string",
+            "default": "#8AB4F8",
+            "format": "color-hex",
+            "order": 11,
+            "markdownDescription": "%setting.groupColors.color2%"
+          },
+          "tabPalette.groupColors.color3": {
+            "type": "string",
+            "default": "#F28B82",
+            "format": "color-hex",
+            "order": 12,
+            "markdownDescription": "%setting.groupColors.color3%"
+          },
+          "tabPalette.groupColors.color4": {
+            "type": "string",
+            "default": "#FDD663",
+            "format": "color-hex",
+            "order": 13,
+            "markdownDescription": "%setting.groupColors.color4%"
+          },
+          "tabPalette.groupColors.color5": {
+            "type": "string",
+            "default": "#81C995",
+            "format": "color-hex",
+            "order": 14,
+            "markdownDescription": "%setting.groupColors.color5%"
+          },
+          "tabPalette.groupColors.color6": {
+            "type": "string",
+            "default": "#FF8BCB",
+            "format": "color-hex",
+            "order": 15,
+            "markdownDescription": "%setting.groupColors.color6%"
+          },
+          "tabPalette.groupColors.color7": {
+            "type": "string",
+            "default": "#C58AF9",
+            "format": "color-hex",
+            "order": 16,
+            "markdownDescription": "%setting.groupColors.color7%"
+          },
+          "tabPalette.groupColors.color8": {
+            "type": "string",
+            "default": "#78D9EC",
+            "format": "color-hex",
+            "order": 17,
+            "markdownDescription": "%setting.groupColors.color8%"
+          },
+          "tabPalette.groupColors.color9": {
+            "type": "string",
+            "default": "#FCAD70",
+            "format": "color-hex",
+            "order": 18,
+            "markdownDescription": "%setting.groupColors.color9%"
+          },
+          "tabPalette.ungroupDropLineColor": {
+            "type": "string",
+            "default": "#F14C4C",
+            "format": "color-hex",
+            "order": 19,
+            "markdownDescription": "%setting.ungroupDropLineColor%"
+          }
+        }
+      },
+      {
+        "id": "tabPalette.keyboard",
+        "title": "%configuration.keyboard%",
+        "order": 3,
+        "properties": {
+          "tabPalette.keyboard.showGroupShortcuts": {
+            "type": "boolean",
+            "default": true,
+            "order": 1,
+            "markdownDescription": "%setting.keyboard.showGroupShortcuts%"
+          },
+          "tabPalette.keyboard.changeKeys": {
+            "type": "null",
+            "default": null,
+            "order": 2,
+            "markdownDescription": "%setting.keyboard.changeKeys%"
+          }
         }
       }
-    },
+    ],
     "submenus": [
       {
         "id": "tabPalette.tabSubmenu",

@@ -186,6 +186,12 @@ export class VSCodeWindow {
     await this.idle(1000); // VS Code notices the file change
   }
 
+  /** Writes the test profile's keybindings.json, like a user editing it; `[]` for none. */
+  async setUserKeybindings(entries: { key: string; command: string }[]): Promise<void> {
+    fs.writeFileSync(path.join(this.profileDir, 'user', 'User', 'keybindings.json'), JSON.stringify(entries, null, 2));
+    await this.idle(1000); // VS Code notices the file change
+  }
+
   /**
    * Sets `workbench.colorCustomizations` by editing the test profile's settings.json, like a
    * user editing the file, and waits until VS Code has applied it (the theme colors changed).
@@ -282,6 +288,14 @@ export class VSCodeWindow {
   }
 
   /** The tab count drawn on a group's chip (setting tabPalette.tabBar.chipTabCount), or null when none is shown. */
+  /** The key a group chip shows (while the modifier keys of Go to Group N are held), or null. */
+  chipKey(group: string): Promise<string | null> {
+    return this.chipLocator(group).evaluate((chip) => {
+      const badge = getComputedStyle(chip, '::after');
+      return chip.dataset.key && badge.content !== 'none' && badge.display !== 'none' ? chip.dataset.key : null;
+    });
+  }
+
   chipCount(group: string): Promise<string | null> {
     return this.chipLocator(group).evaluate((chip) => {
       const badge = getComputedStyle(chip, '::after');
@@ -708,6 +722,16 @@ export class VSCodeWindow {
           ? '[' + el.querySelector('.group-name')!.textContent + (el.closest('.group')!.classList.contains('collapsed') ? ' +' : '') + ']'
           : (el.closest('.members') ? '  ' : '') + el.querySelector('.label')!.textContent,
       ),
+    );
+  }
+
+  /** The key badge on a group's header in the side bar, or null when it shows none. */
+  async sidebarKey(group: string): Promise<string | null> {
+    const frame = await this.sidebar();
+    return frame.evaluate(
+      (name) =>
+        [...document.querySelectorAll('.group-header')].find((h) => h.querySelector('.group-name')?.textContent === name)?.querySelector('.key')?.textContent ?? null,
+      group,
     );
   }
 

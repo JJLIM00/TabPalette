@@ -712,6 +712,118 @@ suite('TabPalette — used like a person would', function () {
     });
   });
 
+  // ------------------------------------------------------------------ keyboard shortcuts
+
+  suite('keyboard shortcuts', () => {
+    // The modifier keys of Go to Group N, and how a chip writes group 1's key, on this platform.
+    const held = process.platform === 'darwin' ? ['Control'] : process.platform === 'linux' ? ['Control', 'Alt'] : ['Alt'];
+    const keyOf = (n: number) => (process.platform === 'darwin' ? `⌃${n}` : `${held.map((m) => (m === 'Control' ? 'Ctrl' : m)).join('+')}+${n}`);
+    const hold = async () => {
+      for (const m of held) {
+        await vscode.page.keyboard.down(m);
+      }
+    };
+    const release = async () => {
+      for (const m of [...held].reverse()) {
+        await vscode.page.keyboard.up(m);
+      }
+      await vscode.press('Escape'); // a lone Alt focuses the menu bar
+    };
+
+    teardown(async () => {
+      await vscode.setUserSetting('tabPalette.tabBar.chipTabCount', undefined);
+      await vscode.setUserSetting('tabPalette.keyboard.showGroupShortcuts', undefined);
+    });
+
+    test("holding the modifier keys shows each chip's key where the count is; letting go shows the count again", async () => {
+      await vscode.setUserSetting('tabPalette.tabBar.chipTabCount', 'always');
+      await makeGroup('Main', ['a.txt', 'b.txt']);
+      await makeGroup('Work', ['c.txt']);
+      await vscode.waitUntil('Main shows its count', async () => (await vscode.chipCount('Main')) === '2');
+      await hold();
+      try {
+        await vscode.waitUntil('the chips show their keys', async () => (await vscode.chipKey('Main')) === keyOf(1) && (await vscode.chipKey('Work')) === keyOf(2));
+        assert.strictEqual(await vscode.chipCount('Main'), null, 'the key takes the place of the count');
+      } finally {
+        await release();
+      }
+      await vscode.waitUntil('the count is back', async () => (await vscode.chipKey('Main')) === null && (await vscode.chipCount('Main')) === '2');
+    });
+
+    test('a key changed in keybindings.json shows on the chip', async () => {
+      const key = [...held.map((m) => m.toLowerCase().replace('control', 'ctrl')), 'q'].join('+');
+      await vscode.setUserKeybindings([{ key, command: 'tabPalette.goToGroup1' }]);
+      try {
+        await makeGroup('Main', ['a.txt']);
+        await hold();
+        try {
+          await vscode.waitUntil('the chip shows the new key', async () => (await vscode.chipKey('Main')) === keyOf(1).replace(/1$/, 'Q'));
+        } finally {
+          await release();
+        }
+      } finally {
+        await vscode.setUserKeybindings([]);
+      }
+    });
+
+    test('the keys stay hidden when turned off in the settings', async () => {
+      await vscode.setUserSetting('tabPalette.keyboard.showGroupShortcuts', false);
+      await makeGroup('Main', ['a.txt']);
+      await hold();
+      try {
+        await vscode.settled(600);
+        assert.strictEqual(await vscode.chipKey('Main'), null);
+      } finally {
+        await release();
+      }
+    });
+
+    test('the side bar group headers show the keys too, in the count badge style', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt']);
+      await makeGroup('Work', ['c.txt']);
+      const frame = await vscode.openSidebar();
+      try {
+        await vscode.waitUntil('the side bar shows both groups', async () => (await vscode.sidebarLines()).filter((l) => l.startsWith('[')).length === 2);
+        await hold();
+        try {
+          await vscode.waitUntil('the headers show their keys', async () => (await vscode.sidebarKey('Main')) === keyOf(1) && (await vscode.sidebarKey('Work')) === keyOf(2));
+          // Filled with the header's text color, the group color as text, like the chips' badge.
+          const badge = await frame.locator('.group-header', { hasText: 'Main' }).evaluate((h) => {
+            const key = getComputedStyle(h.querySelector('.key')!);
+            return { background: key.backgroundColor, color: key.color, header: getComputedStyle(h).color, groupColor: getComputedStyle(h).backgroundColor };
+          });
+          assert.strictEqual(badge.background, badge.header);
+          assert.strictEqual(badge.color, badge.groupColor);
+        } finally {
+          await release();
+        }
+        await vscode.waitUntil('the keys go when let go', async () => (await vscode.sidebarKey('Main')) === null);
+        // Also with the focus in the side bar: VS Code passes its key presses on to the window.
+        await frame.locator('.group-header', { hasText: 'Work' }).focus();
+        await hold();
+        try {
+          await vscode.waitUntil('the headers show their keys with the side bar focused', async () => (await vscode.sidebarKey('Work')) === keyOf(2));
+        } finally {
+          await release();
+        }
+        await vscode.waitUntil('the keys go when let go in the side bar', async () => (await vscode.sidebarKey('Work')) === null);
+      } finally {
+        await vscode.runCommand('View: Show Explorer');
+      }
+    });
+
+    test('the key of group 2 opens it, expanding it when collapsed', async () => {
+      await makeGroup('Main', ['a.txt']);
+      await makeGroup('Work', ['c.txt']);
+      await vscode.clickChip('Work');
+      assert.strictEqual((await vscode.chip('Work'))?.collapsed, true);
+      await vscode.press([...held, '2'].join('+'));
+      await vscode.waitUntil('Work is expanded and c.txt is active', async () => !(await vscode.chip('Work'))?.collapsed && (await vscode.tab('c.txt')).active);
+      await vscode.press([...held, '1'].join('+'));
+      await vscode.waitUntil('a.txt is active', async () => (await vscode.tab('a.txt')).active);
+    });
+  });
+
   // ------------------------------------------------------------------ group editor menu
 
   suite('group editor menu', () => {

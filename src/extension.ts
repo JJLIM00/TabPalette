@@ -6,6 +6,7 @@ import { Layout } from './layout';
 import { MembershipTracker } from './membership';
 import { registerPatchCommands } from './patchCommands';
 import { SettingsWatcher } from './settings';
+import { ShortcutWatcher } from './shortcuts';
 import { GroupStore } from './store';
 import { registerFileSync } from './fileSync';
 import { SIDEBAR_VIEW_ID, SidebarProvider } from './sidebar';
@@ -28,6 +29,7 @@ export function activate(context: vscode.ExtensionContext): TabGroupsApi {
   const store = new GroupStore(context.workspaceState);
   const settings = new SettingsWatcher();
   const current = () => settings.current;
+  const shortcuts = new ShortcutWatcher(context);
   const guard = new CloseGuard();
   const tracker = new MembershipTracker(store, guard);
   const layout = new Layout(store, tracker, guard);
@@ -47,9 +49,11 @@ export function activate(context: vscode.ExtensionContext): TabGroupsApi {
     bridge?.schedule();
     sidebar.refresh();
   });
+  // The chips show the keys of "Go to Group N" (from the user's keybindings.json).
+  shortcuts.onDidChange(() => bridge?.schedule());
   const startBridge = async () => {
     if (!bridge) {
-      bridge = new Bridge(store, handleUiAction, undefined, (row, uri) => tracker.groupIn(row, uri), current);
+      bridge = new Bridge(store, handleUiAction, undefined, (row, uri) => tracker.groupIn(row, uri), current, () => shortcuts.current);
       // The side bar shows the tab bar's selection.
       bridge.onDidChangeReport(() => sidebar.refresh());
       await bridge.start();
@@ -62,7 +66,7 @@ export function activate(context: vscode.ExtensionContext): TabGroupsApi {
     sidebar.refresh();
   };
 
-  context.subscriptions.push(store, settings, tracker, registerFileSync(store), registerContextKeys(store), { dispose: stopBridge });
+  context.subscriptions.push(store, settings, shortcuts, tracker, registerFileSync(store), registerContextKeys(store), { dispose: stopBridge });
   context.subscriptions.push(sidebar, vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, sidebar));
   registerSidebarTabCommands(context, layout);
 

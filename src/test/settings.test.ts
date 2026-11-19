@@ -39,6 +39,12 @@ suite('Settings (tabPalette.*)', () => {
     }
   });
 
+  test('chips show the group keys unless turned off; an invalid value gets the default', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.groupShortcuts, true);
+    assert.strictEqual(parse({ 'keyboard.showGroupShortcuts': false }).groupShortcuts, false);
+    assert.strictEqual(parse({ 'keyboard.showGroupShortcuts': 'no' }).groupShortcuts, true);
+  });
+
   test('lists only the group colors set to a hex color', () => {
     const settings = parse({
       'groupColors.color1': '#123',

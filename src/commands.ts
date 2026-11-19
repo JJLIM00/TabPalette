@@ -2,12 +2,13 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { Bridge, UiAction } from './bridge';
 import { colorIconFactory } from './colorIcons';
-import { Layout } from './layout';
+import { Layout, stepGroup } from './layout';
 import { GROUP_COLORS, GroupColor, TabGroup, colorLabel, displayName, isGroupColor } from './model';
 import type { Settings } from './settings';
+import { GO_TO_GROUP_COMMANDS } from './shortcuts';
 import { GroupStore } from './store';
 import { t, tabCount } from './text';
-import { CloseGuard, activeTabUri, menuTabUri, openFiles, openUris, selectedTabUris } from './tabs';
+import { CloseGuard, activeTabUri, menuTabUri, openFiles, openUris, selectedTabUris, tabUri } from './tabs';
 
 const NEW_GROUP = '__new__';
 const REMOVE = '__remove__';
@@ -28,6 +29,8 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
   const { store, guard, layout } = deps;
   /** A dot in the group color for the pickers; follows the user's color settings. */
   const colorIcon = colorIconFactory(ctx, deps.settings);
+  /** The group tabs were last added to (or made with), first in the group picker. */
+  let lastUsedGroup: string | undefined;
 
   // ---------- prompts (fallbacks when the in-tab-bar editor is not available) ----------
 
@@ -60,16 +63,15 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
       items.push({ label: `$(close) ${t('group.remove')}`, id: REMOVE });
     }
     const groups = store.all().filter((g) => g.id !== exclude && !g.closed);
-    if (groups.length > 0) {
-      items.push({ label: '', kind: vscode.QuickPickItemKind.Separator, id: '' });
-      for (const g of groups) {
-        items.push({
-          label: displayName(g),
-          description: tabCount(g.uris.length),
-          iconPath: colorIcon(g.color),
-          id: g.id,
-        });
-      }
+    const item = (g: TabGroup): GroupItem => ({ label: displayName(g), description: tabCount(g.uris.length), iconPath: colorIcon(g.color), id: g.id });
+    // The group tabs were last added to comes first, already selected: Enter adds to it again.
+    const last = groups.find((g) => g.id === lastUsedGroup);
+    if (last) {
+      items.unshift(item(last), { label: '', kind: vscode.QuickPickItemKind.Separator, id: '' });
+    }
+    const others = groups.filter((g) => g !== last);
+    if (others.length > 0) {
+      items.push({ label: '', kind: vscode.QuickPickItemKind.Separator, id: '' }, ...others.map(item));
     }
     return (await vscode.window.showQuickPick(items, { placeHolder }))?.id;
   }
@@ -82,6 +84,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     }
     await layout.unpin(uris);
     const group = store.create('', store.nextColor(), uris);
+    lastUsedGroup = group.id;
     await layout.placeInGroup(uris);
     const bridge = deps.bridge();
     if (fromSidebar && deps.editInSidebar?.(group.id)) {
@@ -104,6 +107,7 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     }
     await layout.unpin(uris);
     store.addUris(groupId, uris);
+    lastUsedGroup = groupId;
     store.setCollapsed(groupId, false);
     await layout.placeInGroup(uris);
     store.pruneEmpty();
@@ -326,6 +330,25 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
       }
     }
   };
+
+  // ---------- keyboard: go to a group of the active tab row ----------
+
+  /** Opens the group `pick` chooses from the groups of the active tab row (in tab bar order). */
+  const goTo = (pick: (groups: TabGroup[], current: number) => number | undefined) => async () => {
+    const row = vscode.window.tabGroups.activeTabGroup;
+    const groups = layout.groupsIn(row);
+    const active = row.activeTab ? layout.groupIn(row, tabUri(row.activeTab).toString()) : undefined;
+    const index = pick(groups, active ? groups.indexOf(active) : -1);
+    const group = index === undefined ? undefined : groups[index];
+    if (group) {
+      await layout.showGroup(row, group.id);
+    }
+  };
+  GO_TO_GROUP_COMMANDS.forEach((id, n) => {
+    commands[id] = goTo((groups) => (n < groups.length ? n : undefined));
+  });
+  commands['tabPalette.nextGroup'] = goTo((groups, current) => stepGroup(groups.length, current, 1));
+  commands['tabPalette.previousGroup'] = goTo((groups, current) => stepGroup(groups.length, current, -1));
 
   // ---------- "Show Tab Groups" menu: groups in this workspace, including closed ones ----------
 

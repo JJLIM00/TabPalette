@@ -12,6 +12,8 @@ export interface Settings {
   chipMaxWidth: number;
   /** When a group's chip shows how many tabs the group has. */
   chipTabCount: ChipTabCount;
+  /** While the modifier keys of "Go to Group N" are held, chips show their key instead of the count. */
+  groupShortcuts: boolean;
   /** Group colors set in the settings (hex), by slot. A slot not listed uses its theme color. */
   colors: Partial<Record<GroupColor, string>>;
   /** The drop line's color (hex) when a dropped tab would leave its group; unset: its theme color. */
@@ -22,7 +24,7 @@ export interface Settings {
 export const CHIP_TAB_COUNT = ['off', 'collapsed', 'always'] as const;
 export type ChipTabCount = (typeof CHIP_TAB_COUNT)[number];
 
-export const DEFAULT_SETTINGS: Settings = { activeTabOutline: true, chipMaxWidth: 160, chipTabCount: 'off', colors: {} };
+export const DEFAULT_SETTINGS: Settings = { activeTabOutline: true, chipMaxWidth: 160, chipTabCount: 'off', groupShortcuts: true, colors: {} };
 
 /** The range `tabPalette.tabBar.chipMaxWidth` is kept in. */
 export const CHIP_MAX_WIDTH = { min: 40, max: 400 };
@@ -36,6 +38,7 @@ export function parseSettings(get: (key: string) => unknown): Settings {
   const outline = get('tabBar.activeTabOutline');
   const width = get('tabBar.chipMaxWidth');
   const count = get('tabBar.chipTabCount');
+  const shortcuts = get('keyboard.showGroupShortcuts');
   const hex = (key: string) => {
     const value = get(key);
     return typeof value === 'string' && isHexColor(value.trim()) ? value.trim() : undefined;
@@ -55,6 +58,7 @@ export function parseSettings(get: (key: string) => unknown): Settings {
         ? Math.round(Math.min(CHIP_MAX_WIDTH.max, Math.max(CHIP_MAX_WIDTH.min, width)))
         : DEFAULT_SETTINGS.chipMaxWidth,
     chipTabCount: (CHIP_TAB_COUNT as readonly unknown[]).includes(count) ? (count as ChipTabCount) : DEFAULT_SETTINGS.chipTabCount,
+    groupShortcuts: typeof shortcuts === 'boolean' ? shortcuts : DEFAULT_SETTINGS.groupShortcuts,
     colors,
     ...(drop ? { ungroupDropLine: drop } : {}),
   };

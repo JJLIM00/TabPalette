@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Keyboard shortcuts** to move between groups. Each can be changed in Keyboard Shortcuts:
+  - Go to group 1 … 9: `Alt+1` … `Alt+9` (macOS `Ctrl+1` … `Ctrl+9`, Linux `Ctrl+Alt+1` … `Ctrl+Alt+9`). It opens the group's tab you used last, and expands a collapsed group.
+  - Next and previous group: `Ctrl+Alt+]` and `Ctrl+Alt+[` (macOS `Ctrl+Cmd+]` and `Ctrl+Cmd+[`), going round from the last group to the first.
+  - Collapse or expand the active tab's group: `Ctrl+Alt+C` (macOS `Ctrl+Cmd+C`).
+  - Add the active tab, or the selected tabs, to a new group: `Ctrl+Alt+N` (macOS `Ctrl+Cmd+N`).
+- While you hold the modifier keys of "Go to group" (Alt on Windows), each chip on the tab bar and each group header in the side bar shows its key, like `Alt+1`, where the tab count is. It follows keys you change in Keyboard Shortcuts. New setting `tabPalette.keyboard.showGroupShortcuts` turns it off. Its description links to Keyboard Shortcuts, filtered to the Tab Groups keys.
+- The settings are in three sections: Tab Bar, Group Colors and Keyboard Shortcuts. Keyboard Shortcuts has a link that opens the Tab Groups keys.
+- "Add Tab to Group…" (`Ctrl+Alt+G`) lists the group you last added a tab to first, so Enter adds to it again.
+- Fixed: dragging a group chip on a tab bar that wraps onto several lines drew the drop line across every line, and could drop the group on another line. It now shows and drops on the line under the pointer.
+
 ## 0.3.1
 
 - Group chips on the tab bar can show how many tabs the group has, in a small badge. New setting `tabPalette.tabBar.chipTabCount`: off (default), while the group is collapsed, or always.

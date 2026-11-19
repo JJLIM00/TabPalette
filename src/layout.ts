@@ -430,6 +430,24 @@ export class Layout {
     this.store.setCollapsed(groupId, false);
   }
 
+  /** The groups on tab row `row`, in their order on the tab bar (what "Go to Group N" counts). */
+  groupsIn(row: vscode.TabGroup): TabGroup[] {
+    return groupOrder(order(row), (key) => this.groupIn(row, key));
+  }
+
+  /** "Go to Group": expands the group and opens its tab used last (else its first tab) in `row`. */
+  async showGroup(row: vscode.TabGroup, groupId: string): Promise<void> {
+    const keys = order(row);
+    const members = keys.flatMap((key, i) => (this.groupIn(row, key)?.id === groupId ? [i] : []));
+    if (members.length === 0) {
+      return;
+    }
+    const last = this.tracker.lastActiveIn(groupId);
+    const index = members.find((i) => keys[i] === last) ?? members[0];
+    this.store.setCollapsed(groupId, false);
+    await this.showTab(row, row.tabs[index]);
+  }
+
   /** Chrome "Close group": close the tabs, keep the group to reopen later. */
   async close(groupId: string): Promise<void> {
     const group = this.store.get(groupId);
@@ -485,6 +503,32 @@ export class Layout {
     });
     this.store.setCollapsed(groupId, false);
   }
+}
+
+/** The groups of a tab row's tabs (`keys`), each once, in the order they first appear. */
+export function groupOrder<G>(keys: readonly string[], groupOf: (key: string) => G | undefined): G[] {
+  const groups: G[] = [];
+  for (const key of keys) {
+    const g = groupOf(key);
+    if (g && !groups.includes(g)) {
+      groups.push(g);
+    }
+  }
+  return groups;
+}
+
+/**
+ * The group `step` places after (or before, for -1) group `current` of `count`, going round from
+ * the last to the first. From no group (`current` -1): the first going forward, the last going back.
+ */
+export function stepGroup(count: number, current: number, step: 1 | -1): number | undefined {
+  if (count === 0) {
+    return undefined;
+  }
+  if (current < 0) {
+    return step > 0 ? 0 : count - 1;
+  }
+  return (current + step + count) % count;
 }
 
 /**

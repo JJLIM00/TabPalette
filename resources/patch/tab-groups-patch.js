@@ -213,7 +213,7 @@
     // ---------------------------------------------------------------- settings
 
     /** The user's settings (sent with every state, see settings.ts); the defaults while not connected. */
-    var DEFAULT_SETTINGS = { activeTabOutline: true, chipMaxWidth: 160, chipTabCount: 'off', colors: {} };
+    var DEFAULT_SETTINGS = { activeTabOutline: true, chipMaxWidth: 160, chipTabCount: 'off', groupShortcuts: true, colors: {} };
     var settings = DEFAULT_SETTINGS;
     var appliedSettings = JSON.stringify(DEFAULT_SETTINGS);
 
@@ -360,9 +360,15 @@
             counts[t.group] = (counts[t.group] || 0) + 1;
           }
         });
+        // The groups are numbered in their order on this tab row, as "Go to Group N" counts them.
+        var numbers = {};
+        var numbered = 0;
         for (var i = 0; i < tabs.length; i++) {
           var gid = info ? info[i].group : null;
-          decorate(tabs[i], gid ? groups[gid] : null, info, i, fg, gid ? counts[gid] : 0);
+          if (gid && !(gid in numbers)) {
+            numbers[gid] = numbered++;
+          }
+          decorate(tabs[i], gid ? groups[gid] : null, info, i, fg, gid ? counts[gid] : 0, gid ? shortcutOf(numbers[gid]) : '');
         }
       }
       if (openEditorFor && !groups[openEditorFor]) {
@@ -387,12 +393,90 @@
 
     var pendingEdit = null;
 
+    /** Sets or removes (when empty) a data- attribute, touching the DOM only when it changes. */
+    function setData(node, name, value) {
+      if ((node.dataset[name] || '') !== value) {
+        if (value) {
+          node.dataset[name] = value;
+        } else {
+          delete node.dataset[name];
+        }
+      }
+    }
+
+    // ---------------------------------------------------------------- group keys
+    //
+    // While the modifier keys of "Go to Group N" are held (Alt on Windows), each chip shows its
+    // group's key, like Alt+1, where the count is. The extension sends the keys (the user's own,
+    // from keybindings.json). They show after a short hold, so a quick Alt+Left never flashes them.
+
+    var keysShown = false;
+    var keysTimer = null;
+
+    /** The key shown on the chip of the group numbered `n` (0 = first), or ''. */
+    function shortcutOf(n) {
+      var keys = keysShown && state && state.shortcuts;
+      return (keys && keys.labels[n]) || '';
+    }
+
+    /** Whether exactly the modifier keys of the group keys are held. */
+    function holdingModifiers(e) {
+      var m = state && state.shortcuts && state.shortcuts.modifiers;
+      return !!m && e.ctrlKey === m.ctrl && e.altKey === m.alt && e.shiftKey === m.shift && e.metaKey === m.meta;
+    }
+
+    function showKeys(show) {
+      clearTimeout(keysTimer);
+      keysTimer = null;
+      if (keysShown !== show) {
+        keysShown = show;
+        schedule();
+        // The side bar shows the keys on its group headers too. Key presses in the side bar reach
+        // this window as well: VS Code passes them on from its webviews.
+        if (ws && ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'keysShown', shown: show }));
+        }
+      }
+    }
+
+    var MODIFIER_KEYS = ['Control', 'Alt', 'Shift', 'Meta', 'AltGraph'];
+    window.addEventListener(
+      'keydown',
+      function (e) {
+        if (!holdingModifiers(e)) {
+          showKeys(false);
+        } else if (MODIFIER_KEYS.indexOf(e.key) < 0) {
+          // A key pressed with the modifiers: keep the keys shown (Alt+1, then Alt+2), but don't
+          // start showing them.
+          clearTimeout(keysTimer);
+          keysTimer = null;
+        } else if (!keysShown && !keysTimer) {
+          keysTimer = setTimeout(function () {
+            showKeys(true);
+          }, 300);
+        }
+      },
+      true,
+    );
+    window.addEventListener(
+      'keyup',
+      function (e) {
+        if (!holdingModifiers(e)) {
+          showKeys(false);
+        }
+      },
+      true,
+    );
+    window.addEventListener('blur', function () {
+      showKeys(false);
+    });
+
     /** Whether a group's chip shows its tab count (setting tabPalette.tabBar.chipTabCount). */
     function showsCount(g) {
       return settings.chipTabCount === 'always' || (settings.chipTabCount === 'collapsed' && g.collapsed);
     }
 
-    function decorate(tab, g, info, i, fg, count) {
+    function decorate(tab, g, info, i, fg, count, key) {
       var first = !!g && !(i > 0 && info[i - 1].group === g.id);
       var last = !!g && !(i < info.length - 1 && info[i + 1].group === g.id);
       toggle(tab, 'tg-member', !!g);
@@ -440,21 +524,17 @@
       if (label.textContent !== name) {
         label.textContent = name;
       }
-      // The count is drawn by CSS from data-count, so the chip's text stays the group name.
-      var shown = showsCount(g) ? String(count) : '';
-      if ((chip.dataset.count || '') !== shown) {
-        if (shown) {
-          chip.dataset.count = shown;
-        } else {
-          delete chip.dataset.count;
-        }
-      }
+      // The count, or the group's key while its modifier keys are held, is drawn by CSS from
+      // data-count / data-key, so the chip's text stays the group name.
+      var shown = key ? '' : showsCount(g) ? String(count) : '';
+      setData(chip, 'count', shown);
+      setData(chip, 'key', key);
       toggle(chip, 'tg-unnamed', !name);
       setVar(chip, '--tg-chip-fg', fg[g.color]);
       chip.title = tx(g.collapsed ? 'chip.titleCollapsed' : 'chip.titleExpanded', name || tx('group.unnamed'));
       // Measuring forces a layout, so a chip is measured again only when its text or the theme
       // changed. A chip that is not on screen measures 0: try again on the next redraw.
-      var measured = name + '|' + shown + '|' + theme.generation;
+      var measured = name + '|' + shown + '|' + key + '|' + theme.generation;
       if (chip.dataset.tgMeasured !== measured) {
         var width = chip.offsetWidth;
         if (width > 0) {
@@ -1123,14 +1203,17 @@
         ' border-radius: 6px; background: var(--tg-color); color: var(--tg-chip-fg, #202124);' +
         ' font-size: 12px; font-weight: 600; cursor: pointer; user-select: none; -webkit-user-select: none; }',
       '.tg-chip > .tg-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }',
-      /* the tab count (setting tabPalette.tabBar.chipTabCount): a small badge in the chip text color */
-      '.tg-chip[data-count] { padding-right: 3px; }',
-      '.tg-chip[data-count]::after { content: attr(data-count); flex: none; box-sizing: border-box; min-width: 15px; height: 15px; line-height: 15px; padding: 0 4px;' +
+      /* the tab count (setting tabPalette.tabBar.chipTabCount), or the group's key while its modifier
+         keys are held: a small badge in the chip text color */
+      '.tg-chip[data-count], .tg-chip[data-key] { padding-right: 3px; }',
+      '.tg-chip[data-count]::after, .tg-chip[data-key]::after { flex: none; box-sizing: border-box; min-width: 15px; height: 15px; line-height: 15px; padding: 0 4px;' +
         ' border-radius: 4px; background: var(--tg-chip-fg, #202124); color: var(--tg-color); font-size: 10px; font-weight: 700; text-align: center; }',
+      '.tg-chip[data-count]::after { content: attr(data-count); }',
+      '.tg-chip[data-key]::after { content: attr(data-key); }',
       '.tg-chip.tg-unnamed { width: 14px; height: 14px; padding: 0; border-radius: 50%; }',
       '.tg-chip.tg-unnamed > .tg-name { display: none; }',
       /* an unnamed group with its count shown: a chip with only the count */
-      '.tg-chip.tg-unnamed[data-count] { width: auto; height: 20px; padding: 0 3px; border-radius: 6px; }',
+      '.tg-chip.tg-unnamed[data-count], .tg-chip.tg-unnamed[data-key] { width: auto; height: 20px; padding: 0 3px; border-radius: 6px; }',
       '.tg-chip:hover { filter: brightness(1.1); }',
       '.tg-chip.tg-dragging { opacity: .6; cursor: grabbing; }',
       'body.tg-group-dragging, body.tg-group-dragging * { cursor: grabbing !important; }',

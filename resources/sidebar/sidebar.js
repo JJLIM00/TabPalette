@@ -217,6 +217,8 @@
         section.append(el('div', 'row-title', tx('sidebar.editorGroup', row.index + 1)));
       }
       let i = 0;
+      // The groups are numbered in their order in the row, as "Go to Group N" counts them.
+      let numbered = 0;
       while (i < row.tabs.length) {
         const tab = row.tabs[i];
         const group = tab.groupId ? groups.get(tab.groupId) : undefined;
@@ -232,7 +234,9 @@
           members.push(tabItem(row, row.tabs[i], i));
           i++;
         }
-        block.append(groupHeader(row, group, members.length));
+        const key = state.groupKeys ? state.groupKeys[numbered] : null;
+        numbered++;
+        block.append(groupHeader(row, group, members.length, key));
         if (!group.collapsed) {
           const list = el('div', 'members');
           list.setAttribute('role', 'group');
@@ -626,13 +630,15 @@
     }
   }
 
-  function groupHeader(row, group, count) {
+  function groupHeader(row, group, count, key) {
     const header = el('div', 'group-header');
     header.setAttribute('role', 'treeitem');
     header.setAttribute('aria-expanded', String(!group.collapsed));
     header.tabIndex = 0;
     header.draggable = true;
-    header.style.color = textOn(group.color);
+    // --header-fg: the header text color, the background of its key badge.
+    header.style.setProperty('--header-fg', textOn(group.color));
+    header.style.color = 'var(--header-fg)';
     header.dataset.focusKey = 'group:' + row.index + ':' + group.id;
     // Right-click opens the group settings popup (like Chrome), not a VS Code menu: this section has no menu items.
     header.dataset.vscodeContext = JSON.stringify({ webviewSection: 'groupHeader', preventDefaultContextMenuItems: true });
@@ -647,7 +653,10 @@
       tx(group.collapsed ? 'sidebar.headerCollapsed' : 'sidebar.headerExpanded', nameOf(group), tabCount(count));
     header.setAttribute('aria-label', nameOf(group) + ', ' + tabCount(count));
     header.append(name);
-    if (group.collapsed) {
+    // While the modifier keys of "Go to Group N" are held: the group's key, where the count is.
+    if (key) {
+      header.append(el('span', 'key', key));
+    } else if (group.collapsed) {
       header.append(el('span', 'count', String(count)));
     }
     // Chrome: a ⋮ button appears on the header on hover and opens the group's settings.

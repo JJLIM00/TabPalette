@@ -106,11 +106,17 @@ Name and color a set of tabs, collapse it to one chip, and drag tabs in and out,
 <details>
 <summary><b>⌨️ Shortcuts</b></summary>
 
-| Keys (macOS: `Cmd`) | Action |
-|---|---|
-| `Ctrl+Alt+G` | Add tab to a group |
-| `Ctrl+Alt+Shift+W` | Close the tab's group |
-| `Ctrl+Alt+T` | Show all groups |
+| Windows | macOS | Linux | Action |
+|---|---|---|---|
+| `Alt+1` … `Alt+9` | `Ctrl+1` … `Ctrl+9` | `Ctrl+Alt+1` … `Ctrl+Alt+9` | Go to group 1 … 9 (expands it) |
+| `Ctrl+Alt+]` / `Ctrl+Alt+[` | `Ctrl+Cmd+]` / `Ctrl+Cmd+[` | `Ctrl+Alt+]` / `Ctrl+Alt+[` | Next / previous group |
+| `Ctrl+Alt+C` | `Ctrl+Cmd+C` | `Ctrl+Alt+C` | Collapse or expand the tab's group |
+| `Ctrl+Alt+N` | `Ctrl+Cmd+N` | `Ctrl+Alt+N` | Add tab to a new group |
+| `Ctrl+Alt+G` | `Cmd+Alt+G` | `Ctrl+Alt+G` | Add tab to a group (the last one used is first) |
+| `Ctrl+Alt+Shift+W` | `Cmd+Alt+Shift+W` | `Ctrl+Alt+Shift+W` | Close the tab's group |
+| `Ctrl+Alt+T` | `Cmd+Alt+T` | `Ctrl+Alt+T` | Show all groups |
+
+Hold `Alt` (macOS: `Ctrl`, Linux: `Ctrl+Alt`) and each chip and side bar group header shows its key. Change any key in **Keyboard Shortcuts**.
 
 </details>
 
@@ -126,6 +132,7 @@ Search **TabPalette** in Settings. Changes apply at once.
 | `tabPalette.tabBar.chipTabCount` | off | Tab count on a chip: off, while collapsed, or always |
 | `tabPalette.groupColors.color1` … `color9` | Chrome's colors | The nine group colors |
 | `tabPalette.ungroupDropLineColor` | red | Drop line when a tab leaves its group |
+| `tabPalette.keyboard.showGroupShortcuts` | on | Show each chip's key while its modifier keys are held |
 
 </details>
 

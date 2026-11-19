@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { droppedNextToGroup, droppedOutOfGroup, groupInsertIndex, positionAfterGroup } from '../layout';
+import { droppedNextToGroup, droppedOutOfGroup, groupInsertIndex, groupOrder, positionAfterGroup, stepGroup } from '../layout';
 
 /*
  * Tab rows are written as short pictures: 'x G1 G2 y z'.
@@ -111,6 +111,23 @@ suite('Group layout rules', () => {
 
     test('ungrouped tabs in the selection are ignored', () => {
       assert.strictEqual(leaving('G1 G2 a b', 'G2 a'), 'G2');
+    });
+  });
+
+  suite('going to a group with the keyboard', () => {
+    test('groups are counted in their order on the tab row, each once', () => {
+      const groupOf = (tab: string) => (tab.length > 1 ? tab[0] : undefined); // 'A1' is in group A
+      assert.deepStrictEqual(groupOrder(tabs('x B1 B2 y A1 C1 A2'), groupOf), ['B', 'A', 'C']);
+      assert.deepStrictEqual(groupOrder(tabs('x y'), groupOf), []);
+    });
+
+    test('next and previous go round; from no group, next is the first and previous the last', () => {
+      assert.strictEqual(stepGroup(3, 0, 1), 1);
+      assert.strictEqual(stepGroup(3, 2, 1), 0);
+      assert.strictEqual(stepGroup(3, 0, -1), 2);
+      assert.strictEqual(stepGroup(3, -1, 1), 0);
+      assert.strictEqual(stepGroup(3, -1, -1), 2);
+      assert.strictEqual(stepGroup(0, -1, 1), undefined);
     });
   });
 });
