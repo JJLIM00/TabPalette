@@ -296,18 +296,21 @@ export class Layout {
       await vscode.commands.executeCommand('vscode.open', input.uri, { viewColumn: row.viewColumn, preview: tab.isPreview, preserveFocus });
       return;
     }
-    // Focus the row through a file tab of it, then pick the tab by position.
-    const anchor = row.tabs.find((t) => t.input instanceof vscode.TabInputText);
-    if (anchor) {
-      await vscode.commands.executeCommand('vscode.open', (anchor.input as vscode.TabInputText).uri, {
-        viewColumn: row.viewColumn,
-        preview: anchor.isPreview,
-      });
-    } else {
-      const index = vscode.window.tabGroups.all.indexOf(row);
-      const focus = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth'][index];
-      if (focus) {
-        await vscode.commands.executeCommand(`workbench.action.focus${focus}EditorGroup`);
+    // Pick the tab by position in its row. When another row has the focus, focus this one first,
+    // through a file tab of it. (Not when it has the focus already: that file would show for a moment.)
+    if (!row.isActive) {
+      const anchor = row.tabs.find((t) => t.input instanceof vscode.TabInputText);
+      if (anchor) {
+        await vscode.commands.executeCommand('vscode.open', (anchor.input as vscode.TabInputText).uri, {
+          viewColumn: row.viewColumn,
+          preview: anchor.isPreview,
+        });
+      } else {
+        const index = vscode.window.tabGroups.all.indexOf(row);
+        const focus = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth'][index];
+        if (focus) {
+          await vscode.commands.executeCommand(`workbench.action.focus${focus}EditorGroup`);
+        }
       }
     }
     await vscode.commands.executeCommand('workbench.action.openEditorAtIndex', row.tabs.indexOf(tab));

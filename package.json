@@ -204,6 +204,11 @@
         "category": "%category%"
       },
       {
+        "command": "tabPalette.goToTab",
+        "title": "%command.goToTab%",
+        "category": "%category%"
+      },
+      {
         "command": "tabPalette.enablePatch",
         "title": "%command.enablePatch%",
         "category": "%category%"
@@ -705,6 +710,11 @@
         "key": "ctrl+alt+f",
         "mac": "ctrl+alt+f",
         "when": "tabPalette.sidebarSearchOpen"
+      },
+      {
+        "command": "tabPalette.goToTab",
+        "key": "ctrl+alt+p",
+        "mac": "ctrl+alt+p"
       },
       {
         "command": "tabPalette.addToNewGroup",

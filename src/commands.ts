@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { Bridge, UiAction } from './bridge';
+import { Bridge, GoToTabRow, UiAction } from './bridge';
 import { colorIconFactory } from './colorIcons';
 import { Layout, stepGroup } from './layout';
 import { GROUP_COLORS, GroupColor, TabGroup, colorLabel, displayName, isGroupColor } from './model';
@@ -8,7 +8,7 @@ import type { Settings } from './settings';
 import { GO_TO_GROUP_COMMANDS } from './shortcuts';
 import { GroupStore } from './store';
 import { t, tabCount } from './text';
-import { CloseGuard, activeTabUri, menuTabUri, openFiles, openUris, selectedTabUris, tabUri } from './tabs';
+import { CloseGuard, activeTabUri, isOtherTab, menuTabUri, openFiles, openUris, selectedTabUris, tabUri } from './tabs';
 
 const NEW_GROUP = '__new__';
 const REMOVE = '__remove__';
@@ -316,11 +316,8 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
   commands['tabPalette.closeGroup'] = groupCommand('close', t('pick.close'));
   commands['tabPalette.ungroup'] = groupCommand('ungroup', t('pick.ungroup'));
   commands['tabPalette.deleteGroup'] = groupCommand('delete', t('pick.delete'));
-  commands['tabPalette.openGroup'] = async (arg) => {
-    const group = await resolveGroup(arg, t('pick.reopen'));
-    if (!group) {
-      return;
-    }
+  /** Reopens a closed group; offers to drop the files that could not be opened. */
+  async function reopenGroup(group: TabGroup): Promise<void> {
     const failed = await layout.reopen(group.id);
     if (failed.length > 0) {
       const names = failed.map((u) => path.basename(vscode.Uri.parse(u).path)).join(', ');
@@ -328,6 +325,12 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
         store.removeUris(failed);
         store.pruneEmpty();
       }
+    }
+  }
+  commands['tabPalette.openGroup'] = async (arg) => {
+    const group = await resolveGroup(arg, t('pick.reopen'));
+    if (group) {
+      await reopenGroup(group);
     }
   };
 
@@ -395,6 +398,78 @@ export function registerCommands(ctx: vscode.ExtensionContext, deps: CommandDeps
     await picked?.run?.();
   }
   commands['tabPalette.showMenu'] = showGroupMenu;
+
+  // ---------- "Go to Tab in Group": every open tab, and the tabs of closed groups ----------
+
+  type TabItem = vscode.QuickPickItem & { run: () => Promise<void> };
+  /**
+   * Lists the open tabs of each group (in tab bar order), then the open tabs in no group, then
+   * the tabs of closed groups. Picking one shows it, expanding its group, or reopening it first.
+   */
+  async function goToTabInGroup(): Promise<void> {
+    const items: TabItem[] = [];
+    /** What the tab bar script needs to draw each row, by its accessible label ("label, description"). */
+    const look: Record<string, GoToTabRow> = {};
+    const add = (item: TabItem, row: GoToTabRow) => {
+      items.push(item);
+      look[item.description ? `${item.label}, ${item.description}` : item.label] = row;
+    };
+    const describe = (g: TabGroup, tag?: string) => ({
+      description: tag ? `${displayName(g)} · ${tag}` : displayName(g),
+      iconPath: colorIcon(g.color),
+    });
+    /** The open tabs of `group` (undefined: in no group), in tab bar order. */
+    const openTabs = (group: TabGroup | undefined, make: (row: vscode.TabGroup, tab: vscode.Tab) => TabItem) =>
+      vscode.window.tabGroups.all.forEach((row, r) =>
+        row.tabs.forEach((tab, index) => {
+          if (layout.groupIn(row, tabUri(tab).toString()) === group) {
+            add(make(row, tab), { row: r, index, label: tab.label, color: group?.color });
+          }
+        }),
+      );
+    for (const g of store.all().filter((g) => !g.closed)) {
+      openTabs(g, (row, tab) => ({
+        label: tab.label,
+        ...describe(g, g.collapsed ? t('goToTab.collapsed') : undefined),
+        run: async () => {
+          layout.expand(g.id);
+          await layout.showTab(row, tab);
+        },
+      }));
+    }
+    openTabs(undefined, (row, tab) => ({ label: tab.label, run: () => layout.showTab(row, tab) }));
+    for (const g of store.all().filter((g) => g.closed)) {
+      // A closed group's tab opens the whole group again, then shows that tab.
+      for (const uri of g.uris.filter((u) => !isOtherTab(u))) {
+        const file = path.basename(vscode.Uri.parse(uri).path);
+        const run = async () => {
+          await reopenGroup(g);
+          await showTabOf(uri);
+        };
+        add({ label: file, ...describe(g, t('goToTab.closed')), run }, { file, color: g.color });
+      }
+    }
+    deps.bridge()?.goToTab(t('goToTab.title'), [t('goToTab.collapsed'), t('goToTab.closed')], look);
+    const picked = await vscode.window.showQuickPick(items, {
+      title: t('goToTab.title'),
+      placeHolder: items.length > 0 ? t('goToTab.placeholder') : t('goToTab.none'),
+      matchOnDescription: true,
+    });
+    await picked?.run();
+  }
+  commands['tabPalette.goToTab'] = goToTabInGroup;
+
+  /** Shows the tab of `uri`, in the active row if it is open there. */
+  async function showTabOf(uri: string): Promise<void> {
+    const rows = [vscode.window.tabGroups.activeTabGroup, ...vscode.window.tabGroups.all];
+    for (const row of rows) {
+      const tab = row.tabs.find((tb) => tabUri(tb).toString() === uri);
+      if (tab) {
+        await layout.showTab(row, tab);
+        return;
+      }
+    }
+  }
 
   for (const [id, handler] of Object.entries(commands)) {
     ctx.subscriptions.push(vscode.commands.registerCommand(id, handler));

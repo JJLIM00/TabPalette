@@ -135,6 +135,8 @@
           clickTab(msg);
         } else if (msg && msg.type === 'sidebarHover') {
           document.body.classList.add('tg-sidebar-hover');
+        } else if (msg && msg.type === 'goToTab' && typeof msg.title === 'string' && Array.isArray(msg.tags)) {
+          watchGoToTab(msg);
         }
       };
       sock.onclose = function () {
@@ -488,6 +490,185 @@
     document.documentElement.addEventListener('mouseleave', function () {
       document.body.classList.remove('tg-sidebar-hover');
     });
+
+    // "Go to Tab in Group" is a VS Code quick pick: an item shows a color dot, its label, and right
+    // after it the description (the group, and "collapsed" or "closed group"). While that pick is
+    // open (known by its title, tg-goto-tab), each row it lists (`rows`, by the row's accessible
+    // label) shows its tab's icon instead of the dot, and on the right its group as a chip in the
+    // group's color, with the status in a box before it.
+    var goToTab = null;
+    var goToTabObserver = null;
+    var goToTabFrame = 0;
+    function watchGoToTab(msg) {
+      goToTab = { title: msg.title, tags: msg.tags, rows: msg.rows || {}, seen: false, since: Date.now(), showIcons: false };
+      if (!goToTabObserver) {
+        goToTabObserver = new MutationObserver(function () {
+          if (!goToTabFrame) {
+            goToTabFrame = requestAnimationFrame(decorateGoToTab);
+          }
+        });
+        // VS Code reuses the list's rows for other items: a row's label and classes change then.
+        goToTabObserver.observe(document.body, {
+          childList: true,
+          subtree: true,
+          characterData: true,
+          attributes: true,
+          attributeFilter: ['class', 'aria-label'],
+        });
+      }
+    }
+    /** Changes a class only when it differs (any change is seen by the observer above). */
+    function setClass(node, name, on) {
+      if (node.classList.contains(name) !== on) {
+        node.classList.toggle(name, on);
+      }
+    }
+    function decorateGoToTab() {
+      goToTabFrame = 0;
+      var widget = document.querySelector('.quick-input-widget');
+      var title = widget && widget.querySelector('.quick-input-title');
+      var ours = !!goToTab && !!widget && widget.style.display !== 'none' && !!title && title.textContent === goToTab.title;
+      if (widget) {
+        setClass(widget, 'tg-goto-tab', ours);
+        // The file icon theme draws only inside .show-file-icons: added while ours, if VS Code didn't.
+        if (ours && !goToTab.showIcons && !widget.classList.contains('show-file-icons')) {
+          goToTab.showIcons = true;
+        }
+        if (goToTab && goToTab.showIcons) {
+          setClass(widget, 'show-file-icons', ours);
+        }
+      }
+      if (!ours) {
+        // Closed, or replaced by another pick (or it never showed): stop watching.
+        if (goToTabObserver && (!goToTab || goToTab.seen || Date.now() - goToTab.since > 3000)) {
+          goToTab = null;
+          goToTabObserver.disconnect();
+          goToTabObserver = null;
+        }
+        return;
+      }
+      goToTab.seen = true;
+      widget.querySelectorAll('.quick-input-list .monaco-list-row').forEach(function (row) {
+        var key = row.getAttribute('aria-label');
+        var info = key !== null && Object.prototype.hasOwnProperty.call(goToTab.rows, key) ? goToTab.rows[key] : null;
+        if (info) {
+          goToTabIcon(row, key, info);
+          goToTabChip(row, info);
+        }
+      });
+    }
+
+    /** The row's icon: the one its tab shows on the tab bar, else the file icon of its name. */
+    function goToTabIcon(row, key, info) {
+      var label = row.querySelector('.quick-input-list-row .monaco-icon-label');
+      if (!label) {
+        return;
+      }
+      // VS Code keeps the rows for the next time the list opens, and may take the picture out: the
+      // row is done only if it was drawn this time, and still has its picture.
+      var icon = info.icon || (info.icon = iconOfRow(info));
+      var drawn = goToTab.since + '|' + key;
+      if (label.dataset.tgGoto === drawn && label.classList.contains('tg-goto-icon') && (!icon.image || label.querySelector(':scope > .tg-goto-iconpath'))) {
+        return;
+      }
+      label.className = ['monaco-icon-label', 'tg-goto-icon'].concat(icon.classes).join(' ');
+      label.dataset.tgGoto = drawn;
+      var old = label.querySelector(':scope > .tg-goto-iconpath');
+      if (old) {
+        old.remove();
+      }
+      if (icon.image) {
+        var path = document.createElement('div');
+        path.className = 'monaco-icon-label-iconpath tg-goto-iconpath';
+        path.style.backgroundImage = icon.image;
+        label.insertBefore(path, label.firstChild);
+      }
+    }
+    function iconOfRow(info) {
+      var container = info.row === undefined ? null : document.querySelector('.tabs-container[data-tg-row="' + info.row + '"]');
+      var tab = container ? rowTabs(container)[info.index] : null;
+      var label = tab && labelOf(tab) === info.label ? tab.querySelector('.monaco-icon-label') : null;
+      if (label) {
+        // Its icon classes (from the file icon theme, or a symbol), and its own picture (webviews).
+        var path = tab.querySelector('.monaco-icon-label-iconpath');
+        return {
+          classes: Array.prototype.filter.call(label.classList, function (c) {
+            return /icon/.test(c) && c !== 'monaco-icon-label';
+          }),
+          image: path ? path.style.backgroundImage : '',
+        };
+      }
+      return { classes: fileIconClasses(info.file || info.label || ''), image: '' };
+    }
+    /** The classes VS Code gives a file's label for the file icon theme (without its language). */
+    function fileIconClasses(file) {
+      var name = file.toLowerCase().replace(/\s/g, '/');
+      var classes = ['file-icon', name + '-name-file-icon', 'name-file-icon'];
+      var parts = name.split('.');
+      for (var i = 1; i < parts.length; i++) {
+        classes.push(parts.slice(i).join('.') + '-ext-file-icon');
+      }
+      classes.push('ext-file-icon');
+      return classes;
+    }
+
+    /**
+     * "Utils · collapsed" → a box with "collapsed", then a chip "Utils" in the group's color; keeps
+     * the marks of what was typed.
+     */
+    function goToTabChip(row, info) {
+      var label = row.querySelector('.label-description > .monaco-highlighted-label');
+      if (!label || !info.color) {
+        return;
+      }
+      var chip = label.querySelector('.tg-goto-chip');
+      if (!chip) {
+        var value = label.textContent;
+        var tag = goToTab.tags.filter(function (t) {
+          return value.length > t.length + 3 && value.slice(-(t.length + 3)) === ' · ' + t;
+        })[0];
+        if (tag) {
+          // Cut the text from " · " on (it may be split by the marks).
+          var at = value.length - tag.length - 3;
+          var walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT);
+          var nodes = [];
+          for (var n = walker.nextNode(); n; n = walker.nextNode()) {
+            nodes.push(n);
+          }
+          var start = 0;
+          nodes.forEach(function (node) {
+            var length = node.length;
+            if (start >= at) {
+              node.remove();
+            } else if (start + length > at) {
+              node.splitText(at - start).remove();
+            }
+            start += length;
+          });
+          label.querySelectorAll('.highlight').forEach(function (h) {
+            if (!h.textContent) {
+              h.remove();
+            }
+          });
+        }
+        chip = document.createElement('span');
+        chip.className = 'tg-goto-chip';
+        while (label.firstChild) {
+          chip.appendChild(label.firstChild);
+        }
+        if (tag) {
+          var box = document.createElement('span');
+          box.className = 'tg-goto-status';
+          box.textContent = tag;
+          label.appendChild(box);
+        }
+        label.appendChild(chip);
+      }
+      // Set each time: a reused row may show another group of the same name.
+      var fg = theme.fg || (theme.fg = chipForegrounds());
+      setVar(chip, '--tg-color', slotColor(info.color));
+      setVar(chip, '--tg-chip-fg', fg[info.color]);
+    }
 
     /** Whether a group's chip shows its tab count (setting tabPalette.tabBar.chipTabCount). */
     function showsCount(g) {
@@ -1304,6 +1485,19 @@
       'body:not(.tg-sidebar-hover) .monaco-workbench .part:not(:hover) > .title .action-item:has(> [style*="tabpalette-search-"]:not([style*="tabpalette-search-on-"]):not(:focus)),' +
         ' body:not(.tg-sidebar-hover) .monaco-pane-view .pane:not(:hover) > .pane-header .action-item:has(> [style*="tabpalette-search-"]:not([style*="tabpalette-search-on-"]):not(:focus)) { display: none; }',
       '.monaco-pane-view .pane > .pane-header.expanded > .actions:has([style*="tabpalette-search-on-"]) { display: initial; }',
+      // "Go to Tab in Group" (see watchGoToTab): the tab's icon, its group as a chip on the right.
+      '.quick-input-widget.tg-goto-tab .quick-input-list .quick-input-list-icon { display: none; }',
+      // a tab's own picture (a webview's), sized as on the tab bar
+      '.quick-input-widget.tg-goto-tab .tg-goto-iconpath { flex: none; background-size: 16px; background-position: center; background-repeat: no-repeat; }',
+      '.quick-input-widget.tg-goto-tab .quick-input-list .monaco-icon-label-container { display: flex; flex: 1; min-width: 0; }',
+      '.quick-input-widget.tg-goto-tab .quick-input-list .monaco-icon-name-container { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }',
+      '.quick-input-widget.tg-goto-tab .quick-input-list .monaco-icon-description-container { flex: none; margin-left: auto; padding-left: 12px; }',
+      '.quick-input-widget.tg-goto-tab .quick-input-list .label-description:has(.tg-goto-chip) { opacity: 1; }',
+      '.quick-input-widget.tg-goto-tab .tg-goto-chip { display: inline-block; padding: 0 7px; border-radius: 4px; background: var(--tg-color); color: var(--tg-chip-fg, #202124);' +
+        ' font-size: 12px; font-weight: 600; line-height: 17px; }',
+      '.quick-input-widget.tg-goto-tab .tg-goto-chip .highlight { color: inherit; text-decoration: underline; }',
+      '.quick-input-widget.tg-goto-tab .tg-goto-status { display: inline-block; margin-right: 6px; padding: 0 4px; border: 1px solid currentColor; border-radius: 3px;' +
+        ' color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 14px; }',
     ].join('\n');
 
     // ---------------------------------------------------------------- lifecycle

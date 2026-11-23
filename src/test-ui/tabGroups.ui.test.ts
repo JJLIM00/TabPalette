@@ -822,6 +822,98 @@ suite('TabPalette — used like a person would', function () {
       await vscode.press([...held, '1'].join('+'));
       await vscode.waitUntil('a.txt is active', async () => (await vscode.tab('a.txt')).active);
     });
+
+    test('Ctrl+Alt+P lists the open tabs and the tabs of closed groups, and opens the one picked', async () => {
+      await makeGroup('Main', ['a.txt', 'b.txt'], 'Blue');
+      await makeGroup('Work', ['c.txt'], 'Red');
+      await vscode.clickChip('Work');
+      await vscode.clickTab('a.txt');
+      await vscode.press('Control+Alt+Shift+W');
+      await vscode.waitUntil('Main is closed, Work collapsed', async () => (await vscode.tabNames()).join() === 'd.txt' && !!(await vscode.chip('Work'))?.collapsed);
+
+      const items = () =>
+        vscode.page.evaluate(() => [...document.querySelectorAll('.quick-input-list .monaco-list-row')].map((r) => r.getAttribute('aria-label')));
+      await vscode.press('Control+Alt+P');
+      // Open groups' tabs, then tabs in no group, then closed groups' tabs.
+      await vscode.waitUntil('the list shows every tab', async () => (await items()).length === 4);
+      assert.deepStrictEqual(await items(), ['c.txt, Work · collapsed', 'd.txt', 'a.txt, Main · closed group', 'b.txt, Main · closed group']);
+      // With the tab bar patch: the file's icon on the left; on the right the group as a chip in
+      // its color, the status in a box before it.
+      const rows = () =>
+        vscode.page.evaluate(() =>
+          [...document.querySelectorAll('.quick-input-list .monaco-list-row')].map((r) => {
+            const chip = r.querySelector<HTMLElement>('.tg-goto-chip');
+            const right = chip ? r.querySelector('.monaco-icon-label-container')!.getBoundingClientRect().right - chip.getBoundingClientRect().right < 2 : null;
+            return {
+              icon: r.querySelector('.quick-input-list-row .monaco-icon-label')!.classList.contains('txt-ext-file-icon'),
+              chip: chip ? [chip.textContent, getComputedStyle(chip).backgroundColor, right] : null,
+              status: r.querySelector('.tg-goto-status')?.textContent ?? null,
+            };
+          }),
+        );
+      await vscode.waitUntil('the rows are drawn', async () => (await rows()).every((r) => r.icon));
+      const blue = 'rgb(138, 180, 248)';
+      const red = 'rgb(242, 139, 130)';
+      assert.deepStrictEqual(await rows(), [
+        { icon: true, chip: ['Work', red, true], status: 'collapsed' },
+        { icon: true, chip: null, status: null },
+        { icon: true, chip: ['Main', blue, true], status: 'closed group' },
+        { icon: true, chip: ['Main', blue, true], status: 'closed group' },
+      ]);
+      // A tab of a closed group: the group opens again, with that tab active.
+      await vscode.pickFromList('b.txt');
+      await vscode.waitUntil('Main is back, b.txt active', async () => !!(await vscode.chip('Main')) && (await vscode.tab('b.txt')).active);
+      assert.strictEqual(await groupOf('a.txt'), 'Main');
+      // A tab of a collapsed group: the group expands.
+      await vscode.press('Control+Alt+P');
+      await vscode.type('work'); // the group's name finds its tabs too
+      await vscode.waitUntil('only Work\'s tab', async () => (await items()).join('|') === 'c.txt, Work · collapsed');
+      await vscode.press('Enter');
+      await vscode.waitUntil('Work is expanded and c.txt active', async () => !(await vscode.chip('Work'))?.collapsed && (await vscode.tab('c.txt')).active);
+    });
+
+    test('Ctrl+Alt+P shows a tab\'s own picture (a Markdown preview\'s) each time, and picking it goes straight to it', async () => {
+      await vscode.clickTab('a.txt');
+      await vscode.runCommand('Change Language Mode');
+      await vscode.type('Markdown');
+      await vscode.press('Enter');
+      await vscode.runCommand('Markdown: Open Preview');
+      await vscode.waitUntil('the preview is open', async () => (await vscode.tabNames()).includes('Preview a.txt'));
+      await makeGroup('Main', ['Preview a.txt']);
+      const pictures = () => vscode.page.evaluate(() => document.querySelectorAll('.quick-input-widget.tg-goto-tab .tg-goto-iconpath').length);
+      // VS Code keeps the list's rows for the next time: the picture must come back each time.
+      for (let open = 1; open <= 2; open++) {
+        await vscode.press('Control+Alt+P');
+        await vscode.waitUntil(`the preview's picture shows (open ${open})`, async () => (await pictures()) === 1);
+        await vscode.press('Escape');
+        await vscode.waitUntil('the list is closed', async () => (await pictures()) === 0);
+      }
+      // Picking it goes straight to it: no other tab of its row shows on the way.
+      await vscode.clickTab('d.txt');
+      await vscode.press('Control+Alt+P');
+      await vscode.waitUntil('the list is open', async () => (await pictures()) === 1);
+      await vscode.page.evaluate(() => {
+        const w = window as unknown as { tgActive: string[]; tgFrame: number };
+        w.tgActive = [];
+        const tick = () => {
+          const active = [...document.querySelectorAll('.tabs-container > .tab.active')].map((t) => t.getAttribute('aria-label') ?? '').join('|');
+          if (w.tgActive[w.tgActive.length - 1] !== active) {
+            w.tgActive.push(active);
+          }
+          w.tgFrame = requestAnimationFrame(tick);
+        };
+        tick();
+      });
+      await vscode.type('preview');
+      await vscode.press('Enter');
+      await vscode.waitUntil('the preview is active', async () => (await vscode.tab('Preview a.txt')).active);
+      const shown = await vscode.page.evaluate(() => {
+        const w = window as unknown as { tgActive: string[]; tgFrame: number };
+        cancelAnimationFrame(w.tgFrame);
+        return w.tgActive;
+      });
+      assert.deepStrictEqual(shown, ['d.txt', 'Preview a.txt']);
+    });
   });
 
   // ------------------------------------------------------------------ group editor menu

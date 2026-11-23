@@ -33,6 +33,7 @@
   "command.searchTabs": "搜尋群組和分頁",
   "command.closeSearch": "關閉搜尋",
   "command.showMenu": "顯示分頁群組",
+  "command.goToTab": "移至群組中的分頁…",
   "command.enablePatch": "啟用 Chrome 風格的分頁群組 (會修補 VS Code)",
   "command.disablePatch": "停用 Chrome 風格的分頁群組",
   "command.reloadPatch": "重新載入分頁列指令碼",

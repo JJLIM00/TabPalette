@@ -101,6 +101,7 @@ Name and color a set of tabs, collapse it to one chip, and drag tabs in and out,
 | Edit a group | Right-click its header, or press F2 |
 | Reopen a closed group | Click it under **Closed groups** |
 | Find a group or tab | Click 🔍 on the view header, press `Ctrl+Alt+F`, or `Ctrl+F` in the side bar |
+| Go to a tab in any group | `Ctrl+Alt+P` lists every open tab, with its group, and the tabs of closed groups. Pick one: its group expands or reopens |
 
 </details>
 
@@ -117,6 +118,7 @@ Name and color a set of tabs, collapse it to one chip, and drag tabs in and out,
 | `Ctrl+Alt+Shift+W` | `Cmd+Alt+Shift+W` | `Ctrl+Alt+Shift+W` | Close the tab's group |
 | `Ctrl+Alt+T` | `Cmd+Alt+T` | `Ctrl+Alt+T` | Show all groups |
 | `Ctrl+Alt+F` | `Ctrl+Alt+F` | `Ctrl+Alt+F` | Search groups and tabs in the side bar; again to close the search |
+| `Ctrl+Alt+P` | `Ctrl+Alt+P` | `Ctrl+Alt+P` | Go to a tab, in any group |
 
 Hold `Alt` (macOS: `Ctrl`, Linux: `Ctrl+Alt`) and each chip and side bar group header shows its key. Change any key in **Keyboard Shortcuts**.
 

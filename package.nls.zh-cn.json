@@ -33,6 +33,7 @@
   "command.searchTabs": "搜索组和标签页",
   "command.closeSearch": "关闭搜索",
   "command.showMenu": "显示标签页组",
+  "command.goToTab": "转到组中的标签页…",
   "command.enablePatch": "启用 Chrome 风格的标签页组 (会修补 VS Code)",
   "command.disablePatch": "禁用 Chrome 风格的标签页组",
   "command.reloadPatch": "重新加载标签栏脚本",

@@ -33,6 +33,7 @@
   "command.searchTabs": "グループとタブを検索",
   "command.closeSearch": "検索を閉じる",
   "command.showMenu": "タブ グループを表示",
+  "command.goToTab": "グループ内のタブに移動…",
   "command.enablePatch": "Chrome 風のタブ グループを有効にする (VS Code にパッチを適用)",
   "command.disablePatch": "Chrome 風のタブ グループを無効にする",
   "command.reloadPatch": "タブ バーのスクリプトを再読み込み",

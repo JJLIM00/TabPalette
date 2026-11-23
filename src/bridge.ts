@@ -32,6 +32,19 @@ export interface UiAction {
   value?: unknown;
 }
 
+/**
+ * A row of "Go to Tab in Group", for the tab bar script: an open tab is found on the tab bar
+ * (`row` and `index`, as in UiState, checked by `label`) to copy its icon; a closed group's
+ * tab gets the icon of its `file` name. `color` is its group's color slot.
+ */
+export interface GoToTabRow {
+  row?: number;
+  index?: number;
+  label?: string;
+  file?: string;
+  color?: string;
+}
+
 export interface UiState {
   type: 'state';
   groups: { id: string; name: string; color: string; collapsed: boolean }[];
@@ -187,6 +200,15 @@ export class Bridge implements vscode.Disposable {
    */
   sidebarHover(): void {
     this.sendAll(JSON.stringify({ type: 'sidebarHover' }));
+  }
+
+  /**
+   * "Go to Tab in Group" is about to open, with this title: while it is open, the tab bar script
+   * draws each row (`rows`, by the row's accessible label) with its tab's icon, its group as a
+   * chip on the right, and a status from `tags` ("collapsed", "closed group") in a box.
+   */
+  goToTab(title: string, tags: string[], rows: Record<string, GoToTabRow>): void {
+    this.sendAll(JSON.stringify({ type: 'goToTab', title, tags, rows }));
   }
 
   async start(): Promise<void> {

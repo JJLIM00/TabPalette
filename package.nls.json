@@ -33,6 +33,7 @@
   "command.searchTabs": "Search Groups and Tabs",
   "command.closeSearch": "Close Search",
   "command.showMenu": "Show Tab Groups",
+  "command.goToTab": "Go to Tab in Group…",
   "command.enablePatch": "Enable Chrome-style Tab Groups (patches VS Code)",
   "command.disablePatch": "Disable Chrome-style Tab Groups",
   "command.reloadPatch": "Reload Tab Bar Script",
