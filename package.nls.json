@@ -30,6 +30,8 @@
   "command.goToGroup9": "Go to Group 9",
   "command.nextGroup": "Go to Next Group",
   "command.previousGroup": "Go to Previous Group",
+  "command.searchTabs": "Search Groups and Tabs",
+  "command.closeSearch": "Close Search",
   "command.showMenu": "Show Tab Groups",
   "command.enablePatch": "Enable Chrome-style Tab Groups (patches VS Code)",
   "command.disablePatch": "Disable Chrome-style Tab Groups",

@@ -133,6 +133,8 @@
           schedule();
         } else if (msg && msg.type === 'click' && typeof msg.row === 'number' && typeof msg.index === 'number') {
           clickTab(msg);
+        } else if (msg && msg.type === 'sidebarHover') {
+          document.body.classList.add('tg-sidebar-hover');
         }
       };
       sock.onclose = function () {
@@ -469,6 +471,22 @@
     );
     window.addEventListener('blur', function () {
       showKeys(false);
+    });
+
+    // The side bar's page says when the pointer comes over it (tg-sidebar-hover, see the side bar's
+    // search button below). It can't tell when the pointer leaves, but the window can: the pointer
+    // moving anywhere here is not over that page.
+    document.addEventListener(
+      'mousemove',
+      function () {
+        if (document.body.classList.contains('tg-sidebar-hover')) {
+          document.body.classList.remove('tg-sidebar-hover');
+        }
+      },
+      true,
+    );
+    document.documentElement.addEventListener('mouseleave', function () {
+      document.body.classList.remove('tg-sidebar-hover');
     });
 
     /** Whether a group's chip shows its tab count (setting tabPalette.tabBar.chipTabCount). */
@@ -1275,6 +1293,17 @@
       '.tg-popup .tg-icon { font-size: 16px; opacity: .9; }',
       '.tg-popup .tg-text { flex: 1; font-weight: 600; }',
       '.tg-popup .tg-key { opacity: .75; font-size: 12px; }',
+      // The side bar's search buttons (found by their icon files): drawn with VS Code's own search
+      // icon, the pressed one like VS Code's toggled buttons. The plain one shows only while the
+      // pointer is over the view (its header, or its page: tg-sidebar-hover); the pressed one always shows.
+      '.monaco-workbench .action-label[style*="tabpalette-search-"] { background-image: none !important; }',
+      '.monaco-workbench .action-label[style*="tabpalette-search-"]::before { content: "\\ea6d"; display: block; font: normal normal normal 16px/1 codicon; }',
+      '.monaco-workbench .action-label[style*="tabpalette-search-on-"] { color: var(--vscode-inputOption-activeForeground) !important;' +
+        ' background-color: var(--vscode-inputOption-activeBackground) !important;' +
+        ' outline: 1px solid var(--vscode-inputOption-activeBorder) !important; outline-offset: -1px; }',
+      'body:not(.tg-sidebar-hover) .monaco-workbench .part:not(:hover) > .title .action-item:has(> [style*="tabpalette-search-"]:not([style*="tabpalette-search-on-"]):not(:focus)),' +
+        ' body:not(.tg-sidebar-hover) .monaco-pane-view .pane:not(:hover) > .pane-header .action-item:has(> [style*="tabpalette-search-"]:not([style*="tabpalette-search-on-"]):not(:focus)) { display: none; }',
+      '.monaco-pane-view .pane > .pane-header.expanded > .actions:has([style*="tabpalette-search-on-"]) { display: initial; }',
     ].join('\n');
 
     // ---------------------------------------------------------------- lifecycle

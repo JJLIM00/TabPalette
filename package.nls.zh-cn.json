@@ -30,6 +30,8 @@
   "command.goToGroup9": "转到组 9",
   "command.nextGroup": "转到下一个组",
   "command.previousGroup": "转到上一个组",
+  "command.searchTabs": "搜索组和标签页",
+  "command.closeSearch": "关闭搜索",
   "command.showMenu": "显示标签页组",
   "command.enablePatch": "启用 Chrome 风格的标签页组 (会修补 VS Code)",
   "command.disablePatch": "禁用 Chrome 风格的标签页组",

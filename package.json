@@ -181,6 +181,24 @@
         "category": "%category%"
       },
       {
+        "command": "tabPalette.searchTabs",
+        "title": "%command.searchTabs%",
+        "category": "%category%",
+        "icon": {
+          "light": "resources/sidebar/tabpalette-search-light.svg",
+          "dark": "resources/sidebar/tabpalette-search-dark.svg"
+        }
+      },
+      {
+        "command": "tabPalette.closeSearch",
+        "title": "%command.closeSearch%",
+        "category": "%category%",
+        "icon": {
+          "light": "resources/sidebar/tabpalette-search-on-light.svg",
+          "dark": "resources/sidebar/tabpalette-search-on-dark.svg"
+        }
+      },
+      {
         "command": "tabPalette.showMenu",
         "title": "%command.showMenu%",
         "category": "%category%"
@@ -430,6 +448,10 @@
         {
           "command": "tabPalette.tab.closeAll",
           "when": "false"
+        },
+        {
+          "command": "tabPalette.closeSearch",
+          "when": "tabPalette.sidebarSearchOpen"
         }
       ],
       "webview/context": [
@@ -558,6 +580,18 @@
           "group": "1_closed@2",
           "when": "webviewId == 'tabPalette.sidebar' && webviewSection == 'closedGroup'"
         }
+      ],
+      "view/title": [
+        {
+          "command": "tabPalette.searchTabs",
+          "when": "view == tabPalette.sidebar && !tabPalette.sidebarSearchOpen",
+          "group": "navigation"
+        },
+        {
+          "command": "tabPalette.closeSearch",
+          "when": "view == tabPalette.sidebar && tabPalette.sidebarSearchOpen",
+          "group": "navigation"
+        }
       ]
     },
     "keybindings": [
@@ -659,6 +693,18 @@
         "command": "tabPalette.toggleCollapse",
         "key": "ctrl+alt+c",
         "mac": "ctrl+cmd+c"
+      },
+      {
+        "command": "tabPalette.searchTabs",
+        "key": "ctrl+alt+f",
+        "mac": "ctrl+alt+f",
+        "when": "!tabPalette.sidebarSearchOpen"
+      },
+      {
+        "command": "tabPalette.closeSearch",
+        "key": "ctrl+alt+f",
+        "mac": "ctrl+alt+f",
+        "when": "tabPalette.sidebarSearchOpen"
       },
       {
         "command": "tabPalette.addToNewGroup",

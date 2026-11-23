@@ -67,7 +67,12 @@ export function activate(context: vscode.ExtensionContext): TabGroupsApi {
   };
 
   context.subscriptions.push(store, settings, shortcuts, tracker, registerFileSync(store), registerContextKeys(store), { dispose: stopBridge });
-  context.subscriptions.push(sidebar, vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, sidebar));
+  context.subscriptions.push(
+    sidebar,
+    vscode.window.registerWebviewViewProvider(SIDEBAR_VIEW_ID, sidebar),
+    vscode.commands.registerCommand('tabPalette.searchTabs', () => sidebar.search()),
+    vscode.commands.registerCommand('tabPalette.closeSearch', () => sidebar.closeSearch()),
+  );
   registerSidebarTabCommands(context, layout);
 
   registerPatchCommands(context, {

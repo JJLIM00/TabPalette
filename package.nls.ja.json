@@ -30,6 +30,8 @@
   "command.goToGroup9": "グループ 9 へ移動",
   "command.nextGroup": "次のグループへ移動",
   "command.previousGroup": "前のグループへ移動",
+  "command.searchTabs": "グループとタブを検索",
+  "command.closeSearch": "検索を閉じる",
   "command.showMenu": "タブ グループを表示",
   "command.enablePatch": "Chrome 風のタブ グループを有効にする (VS Code にパッチを適用)",
   "command.disablePatch": "Chrome 風のタブ グループを無効にする",

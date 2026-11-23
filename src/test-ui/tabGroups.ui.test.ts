@@ -1186,6 +1186,92 @@ suite('TabPalette — used like a person would', function () {
       await vscode.waitUntil('the chip is collapsed', async () => (await vscode.chip('To read'))?.collapsed === true);
       await vscode.waitUntil('the side bar shows it collapsed', async () => (await vscode.sidebarLines()).join('|') === 'a.txt|b.txt|[To read +]|d.txt');
     });
+
+    test('the search button on the view header opens a search box that finds groups by name and tabs by name', async () => {
+      await makeGroup('House move', ['a.txt', 'b.txt'], 'Blue');
+      await makeGroup('To read', ['c.txt'], 'Red');
+      const frame = await vscode.openSidebar();
+      await vscode.waitUntil('the side bar shows both groups', async () => (await vscode.sidebarLines()).join('|') === '[House move]|  a.txt|  b.txt|[To read]|  c.txt|d.txt');
+      assert.deepStrictEqual(await vscode.sidebarHeaderButtonsAway(), [], 'the search button hides while the mouse is away');
+      await vscode.clickSidebarSearch();
+      await vscode.waitUntil('the search box opens, focused', async () => {
+        const search = await vscode.sidebarSearch();
+        return search.shown && search.focused;
+      });
+      // A group found by its name shows all its tabs; other groups show only the tabs found.
+      await vscode.type('a');
+      await vscode.waitUntil('"a" finds a.txt and the group "To read"', async () => (await vscode.sidebarLines()).join('|') === '[House move]|  a.txt|[To read]|  c.txt');
+      assert.deepStrictEqual(await frame.evaluate(() => [...document.querySelectorAll('mark.match')].map((m) => m.textContent)), ['a', 'a'], 'the match is marked');
+      // While the box is open, the header shows the search button pressed; a click on it empties
+      // and closes the box.
+      await vscode.waitUntil('the pressed button shows', async () => (await (await vscode.sidebarHeaderButton('Close Search')).count()) === 1);
+      assert.strictEqual(await (await vscode.sidebarHeaderButton('Search Groups and Tabs')).count(), 0, 'one search button at a time');
+      assert.deepStrictEqual(await vscode.sidebarHeaderButtonsAway(), ['Close Search (Ctrl+Alt+F)'], 'the pressed button stays while the mouse is away');
+      await (await vscode.sidebarHeaderButton('Close Search')).click();
+      await vscode.waitUntil('the box closes and everything shows again', async () =>
+        !(await vscode.sidebarSearch()).shown && (await vscode.sidebarLines()).join('|') === '[House move]|  a.txt|  b.txt|[To read]|  c.txt|d.txt',
+      );
+      await vscode.waitUntil('the search button is back', async () => (await (await vscode.sidebarHeaderButton('Search Groups and Tabs')).count()) === 1);
+      await vscode.clickSidebarSearch();
+      await vscode.waitUntil('the box opens again, focused', async () => (await vscode.sidebarSearch()).focused);
+      assert.strictEqual((await vscode.sidebarSearch()).value, '', 'it opens empty again');
+      await vscode.type('a');
+      // Escape empties the box; again, it closes.
+      await vscode.press('Escape');
+      await vscode.waitUntil('everything shows again', async () => (await vscode.sidebarLines()).join('|') === '[House move]|  a.txt|  b.txt|[To read]|  c.txt|d.txt');
+      assert.strictEqual((await vscode.sidebarSearch()).shown, true);
+      await vscode.press('Escape');
+      await vscode.waitUntil('the search box closes', async () => !(await vscode.sidebarSearch()).shown);
+    });
+
+    test('a search shows the tabs of collapsed groups, the tabs in no group at the bottom; Enter opens the first', async () => {
+      await makeGroup('To read', ['c.txt'], 'Red');
+      await vscode.openSidebar();
+      await vscode.clickSidebarHeader('To read');
+      await vscode.waitUntil('the group is collapsed', async () => (await vscode.sidebarLines()).join('|') === 'a.txt|b.txt|[To read +]|d.txt');
+      const frame = await vscode.sidebar();
+      await frame.locator('.end').last().click(); // focuses the side bar, on no tab
+      await vscode.press('Control+F');
+      await vscode.waitUntil('Ctrl+F opens the search box', async () => (await vscode.sidebarSearch()).focused);
+      await vscode.type('.txt');
+      await vscode.waitUntil('the group shows its tab, then the others', async () => (await vscode.sidebarLines()).join('|') === '[To read]|  c.txt|a.txt|b.txt|d.txt');
+      await frame.locator('.search-input').fill('d.t');
+      await vscode.waitUntil('only d.txt', async () => (await vscode.sidebarLines()).join('|') === 'd.txt');
+      await vscode.press('Enter');
+      await vscode.waitUntil('d.txt is open', async () => (await vscode.tabs()).find((t) => t.name === 'd.txt')?.active === true);
+      await frame.locator('.search-input').fill('nothing like this');
+      await vscode.waitUntil('a note says nothing matches', async () => !!(await frame.$('.empty')));
+      // The × empties the box but leaves it open, and hides while there is nothing to clear.
+      await frame.locator('.search-clear').click();
+      await vscode.waitUntil('the box is empty, still open and focused, everything shows again', async () => {
+        const search = await vscode.sidebarSearch();
+        return search.shown && search.focused && search.value === '' && (await vscode.sidebarLines()).join('|') === 'a.txt|b.txt|[To read +]|d.txt';
+      });
+      assert.strictEqual(await frame.locator('.search-clear').isVisible(), false, 'no × while the box is empty');
+      // Ctrl+Alt+F, while the box is open, empties it and closes it.
+      await vscode.press('Control+Alt+F');
+      await vscode.waitUntil('the box closes, everything shows again', async () => !(await vscode.sidebarSearch()).shown && (await vscode.sidebarLines()).join('|') === 'a.txt|b.txt|[To read +]|d.txt');
+    });
+
+    test('Ctrl+Alt+F opens the search from the editor; an open search comes back when the view is shown again', async () => {
+      await vscode.page.locator('.part.editor .view-lines').first().click();
+      await vscode.press('Control+Alt+F');
+      await vscode.waitUntil('the side bar opens with its search box focused', async () => (await vscode.sidebarSearch()).focused);
+      await vscode.type('b');
+      await vscode.waitUntil('"b" finds b.txt', async () => (await vscode.sidebarLines()).join('|') === 'b.txt');
+      // Another view in the side bar, then this one again: its page loads again, search and all.
+      await vscode.press('Control+Shift+E');
+      await vscode.openSidebar();
+      await vscode.waitUntil('the search is back', async () => {
+        const search = await vscode.sidebarSearch();
+        return search.shown && search.value === 'b' && (await vscode.sidebarLines()).join('|') === 'b.txt';
+      });
+      assert.deepStrictEqual(await vscode.sidebarHeaderButtonsAway(), ['Close Search (Ctrl+Alt+F)'], 'the header still shows the button pressed');
+      // Ctrl+Alt+F again empties the search and closes the box.
+      await vscode.press('Control+Alt+F');
+      await vscode.waitUntil('the box closes, everything shows again', async () => !(await vscode.sidebarSearch()).shown && (await vscode.sidebarLines()).length === 4);
+      assert.deepStrictEqual(await vscode.sidebarHeaderButtonsOverList(), ['Search Groups and Tabs (Ctrl+Alt+F)'], 'over the list, the search button shows');
+    });
   });
 
   // ------------------------------------------------------------------ reloading the tab bar script

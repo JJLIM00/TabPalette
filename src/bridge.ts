@@ -181,6 +181,14 @@ export class Bridge implements vscode.Disposable {
     this.sendAll(JSON.stringify({ type: 'click', row, index, label, ctrl: !!modifiers.ctrl, meta: !!modifiers.meta, shift: !!modifiers.shift }));
   }
 
+  /**
+   * Tells the tab bar script that the pointer came over the side bar's page, which is drawn outside
+   * the view's own elements: the view's search button shows until the pointer leaves it.
+   */
+  sidebarHover(): void {
+    this.sendAll(JSON.stringify({ type: 'sidebarHover' }));
+  }
+
   async start(): Promise<void> {
     if (this.server) {
       return;

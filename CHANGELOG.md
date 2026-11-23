@@ -7,8 +7,9 @@
   - Next and previous group: `Ctrl+Alt+]` and `Ctrl+Alt+[` (macOS `Ctrl+Cmd+]` and `Ctrl+Cmd+[`), going round from the last group to the first.
   - Collapse or expand the active tab's group: `Ctrl+Alt+C` (macOS `Ctrl+Cmd+C`).
   - Add the active tab, or the selected tabs, to a new group: `Ctrl+Alt+N` (macOS `Ctrl+Cmd+N`).
-- While you hold the modifier keys of "Go to group" (Alt on Windows), each chip on the tab bar and each group header in the side bar shows its key, like `Alt+1`, where the tab count is. It follows keys you change in Keyboard Shortcuts. New setting `tabPalette.keyboard.showGroupShortcuts` turns it off. Its description links to Keyboard Shortcuts, filtered to the Tab Groups keys.
+- While you hold the modifier keys of "Go to group" (Alt on Windows), each chip on the tab bar and each group header in the side bar shows its key, like `Alt+1`, where the tab count is. It follows keys you change in Keyboard Shortcuts. New setting `tabPalette.keyboard.showGroupShortcuts` turns it off.
 - The settings are in three sections: Tab Bar, Group Colors and Keyboard Shortcuts. Keyboard Shortcuts has a link that opens the Tab Groups keys.
+- **Search in the side bar.** The search button on the view header (shown while the mouse is over the view), `Ctrl+Alt+F`, or `Ctrl+F` in the side bar opens a search box that finds groups by name and tabs by name. A group found by name shows all its tabs; other groups show only the tabs found, even when collapsed; tabs in no group come last. While the box is open the search button shows pressed; a click on it (or `Ctrl+Alt+F` again) empties the search and closes the box. An open search stays open when the view is collapsed or another view is shown. The × in the box empties it and leaves it open. Enter opens the first tab found, Escape empties the box and closes it.
 - "Add Tab to Group…" (`Ctrl+Alt+G`) lists the group you last added a tab to first, so Enter adds to it again.
 - Fixed: dragging a group chip on a tab bar that wraps onto several lines drew the drop line across every line, and could drop the group on another line. It now shows and drops on the line under the pointer.
 

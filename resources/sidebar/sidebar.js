@@ -86,6 +86,10 @@
       loadFonts(state.fonts || []);
       pruneSelection();
       render();
+    } else if (e.data && e.data.type === 'search') {
+      openSearch(e.data.restore === true ? (e.data.focus ? 'focus' : 'quiet') : false);
+    } else if (e.data && e.data.type === 'closeSearch') {
+      closeSearch();
     } else if (e.data && e.data.type === 'edit') {
       // A new group made from the side bar's menu: open its settings here, like Chrome.
       const header = headerOf(e.data.groupId);
@@ -150,6 +154,156 @@
     }
   });
   document.body.addEventListener('scroll', () => showScrollbar(true), { passive: true });
+
+  // ---------------------------------------------------------------- search
+  //
+  // The search button on the view's header (or Ctrl+F in the side bar) opens a search box at the
+  // top. It finds groups by name and tabs by name (or folder), in every group, collapsed or not.
+
+  /** What is being searched for, in lower case; '' when the search box is closed or empty. */
+  let query = '';
+  const searchBar = el('div', 'search');
+  searchBar.hidden = true;
+  const searchInput = el('input', 'search-input');
+  searchInput.type = 'text';
+  searchInput.spellcheck = false;
+  const searchClear = el('button', 'search-clear');
+  searchClear.tabIndex = -1;
+  searchBar.append(searchInput, searchClear);
+  document.body.insertBefore(searchBar, root);
+
+  /**
+   * Shows the search box and focuses it. On a page that just reloaded, `restore` puts back what was
+   * typed in it before: 'focus' then focuses it too, 'quiet' does not.
+   */
+  function openSearch(restore) {
+    searchInput.placeholder = tx('sidebar.search');
+    searchInput.setAttribute('aria-label', tx('sidebar.search'));
+    searchClear.title = tx('sidebar.searchClear');
+    searchClear.setAttribute('aria-label', tx('sidebar.searchClear'));
+    if (searchBar.hidden) {
+      searchBar.hidden = false;
+      vscode.postMessage({ type: 'searchOpen', open: true });
+    }
+    if (restore) {
+      searchInput.value = (vscode.getState() || {}).search || '';
+      setQuery(searchInput.value);
+      if (restore === 'quiet') {
+        return;
+      }
+    }
+    searchInput.focus();
+    searchInput.select();
+    // Opened from outside the view (the header button, Ctrl+Alt+F): the page gets the keyboard a
+    // moment later, which puts the caret back; select again then.
+    selectOnFocus = !document.hasFocus();
+  }
+
+  let selectOnFocus = false;
+  searchInput.addEventListener('focus', () => {
+    if (selectOnFocus) {
+      selectOnFocus = false;
+      searchInput.select();
+    }
+  });
+
+  function closeSearch() {
+    if (!searchBar.hidden) {
+      vscode.postMessage({ type: 'searchOpen', open: false });
+    }
+    searchBar.hidden = true;
+    searchInput.value = '';
+    setQuery('');
+    const first = root.querySelector('[tabindex="0"]');
+    if (first) {
+      first.focus();
+    }
+  }
+
+  function setQuery(value) {
+    // Kept for the page that replaces this one when the view is shown again.
+    vscode.setState(Object.assign({}, vscode.getState(), { search: value }));
+    const next = value.trim().toLowerCase();
+    if (next !== query) {
+      query = next;
+      if (state) {
+        render();
+        document.body.scrollTop = 0;
+      }
+    }
+  }
+
+  function matches(value) {
+    return !!query && String(value || '').toLowerCase().includes(query);
+  }
+
+  function tabMatches(tab) {
+    return matches(tab.label) || matches(tab.description);
+  }
+
+  /** Fills `node` with `value`, the part that matches the search marked. */
+  function marked(node, value) {
+    const at = query ? value.toLowerCase().indexOf(query) : -1;
+    if (at < 0) {
+      node.textContent = value;
+      return node;
+    }
+    node.append(value.slice(0, at), el('mark', 'match', value.slice(at, at + query.length)), value.slice(at + query.length));
+    return node;
+  }
+
+  searchInput.addEventListener('input', () => setQuery(searchInput.value));
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (searchInput.value) {
+        searchInput.value = '';
+        setQuery('');
+      } else {
+        closeSearch();
+      }
+    } else if (e.key === 'Enter') {
+      // Opens the first tab found.
+      e.preventDefault();
+      const first = root.querySelector('.tab');
+      if (first) {
+        first.click();
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const first = root.querySelector('[tabindex="0"]');
+      if (first) {
+        first.focus();
+      }
+    }
+  });
+  // Empties the box but leaves it open; the header button, Ctrl+Alt+F or Escape closes it.
+  searchClear.addEventListener('click', () => {
+    searchInput.value = '';
+    setQuery('');
+    searchInput.focus();
+  });
+  // The view's search button shows while the pointer is over the view (see sidebarHover in bridge.ts;
+  // the tab bar script sees when it leaves).
+  document.documentElement.addEventListener('mouseenter', () => vscode.postMessage({ type: 'hover' }));
+  // Ctrl+F (Cmd+F): caught before VS Code's webview code passes it on to the window, where it
+  // would also open the editor's Find box.
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openSearch();
+      }
+    },
+    true,
+  );
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !searchBar.hidden && e.target !== searchInput && !e.defaultPrevented) {
+      closeSearch();
+    }
+  });
 
   // ---------------------------------------------------------------- drawing
 
@@ -216,6 +370,10 @@
       if (several) {
         section.append(el('div', 'row-title', tx('sidebar.editorGroup', row.index + 1)));
       }
+      // While searching: the groups whose name matches (with all their tabs) or that have matching
+      // tabs (just those, shown even when the group is collapsed), then the matching tabs that are
+      // in no group.
+      const loose = [];
       let i = 0;
       // The groups are numbered in their order in the row, as "Go to Group N" counts them.
       let numbered = 0;
@@ -223,27 +381,40 @@
         const tab = row.tabs[i];
         const group = tab.groupId ? groups.get(tab.groupId) : undefined;
         if (!group) {
-          section.append(tabItem(row, tab, i));
+          if (!query) {
+            section.append(tabItem(row, tab, i));
+          } else if (tabMatches(tab)) {
+            loose.push(tabItem(row, tab, i));
+          }
           i++;
           continue;
         }
-        const block = el('div', 'group' + (group.collapsed ? ' collapsed' : ''));
-        block.style.setProperty('--group-color', colorVar(group.color));
-        const members = [];
+        const all = [];
         while (i < row.tabs.length && row.tabs[i].groupId === group.id) {
-          members.push(tabItem(row, row.tabs[i], i));
+          all.push(i);
           i++;
         }
         const key = state.groupKeys ? state.groupKeys[numbered] : null;
         numbered++;
-        block.append(groupHeader(row, group, members.length, key));
-        if (!group.collapsed) {
+        const shown = !query || matches(group.name) ? all : all.filter((t) => tabMatches(row.tabs[t]));
+        if (shown.length === 0) {
+          continue;
+        }
+        const open = !group.collapsed || !!query;
+        const block = el('div', 'group' + (open ? '' : ' collapsed'));
+        block.style.setProperty('--group-color', colorVar(group.color));
+        block.append(groupHeader(row, group, all.length, key));
+        if (open) {
           const list = el('div', 'members');
           list.setAttribute('role', 'group');
-          list.append(...members);
+          list.append(...shown.map((t) => tabItem(row, row.tabs[t], t)));
           block.append(list);
         }
         section.append(block);
+      }
+      section.append(...loose);
+      if (query && !section.querySelector('.tab, .group-header')) {
+        continue; // nothing found in this row
       }
       const end = el('div', 'end');
       end.dataset.row = String(row.index);
@@ -253,7 +424,7 @@
     if (state.rows.every((r) => r.tabs.length === 0)) {
       root.prepend(el('div', 'empty', tx('sidebar.noTabs')));
     }
-    const closed = state.groups.filter((g) => g.closed);
+    const closed = state.groups.filter((g) => g.closed && (!query || matches(g.name)));
     if (closed.length > 0) {
       const section = el('div', 'closed');
       section.append(el('div', 'row-title', tx('sidebar.closedGroups')));
@@ -261,6 +432,9 @@
         section.append(closedGroup(group));
       }
       root.append(section);
+    }
+    if (query && !root.querySelector('.tab, .group-header, .closed-group')) {
+      root.append(el('div', 'empty', tx('sidebar.noMatches')));
     }
     if (focused) {
       const again = root.querySelector('[data-focus-key="' + CSS.escape(focused) + '"]');
@@ -456,7 +630,7 @@
     item.setAttribute('aria-selected', String(selected || tab.active));
     item.tabIndex = 0;
     item.title = tab.tooltip;
-    item.draggable = true;
+    item.draggable = !query; // a filtered list has no true places to drop on
     item.dataset.row = String(row.index);
     item.dataset.index = String(index);
     item.dataset.focusKey = 'tab:' + row.index + ':' + tab.key;
@@ -481,10 +655,9 @@
     const icon = fileIcon(tab.icon);
     icon.setAttribute('aria-hidden', 'true');
     item.classList.toggle('pinned', tab.pinned);
-    const label = el('span', 'label', tab.label);
-    item.append(icon, label);
+    item.append(icon, marked(el('span', 'label'), tab.label));
     if (tab.description) {
-      item.append(el('span', 'description', tab.description));
+      item.append(marked(el('span', 'description'), tab.description));
     }
     const close = el('button', 'close');
     close.title = tab.dirty ? tx('sidebar.closeUnsaved') : tx('sidebar.close');
@@ -635,7 +808,7 @@
     header.setAttribute('role', 'treeitem');
     header.setAttribute('aria-expanded', String(!group.collapsed));
     header.tabIndex = 0;
-    header.draggable = true;
+    header.draggable = !query;
     // --header-fg: the header text color, the background of its key badge.
     header.style.setProperty('--header-fg', textOn(group.color));
     header.style.color = 'var(--header-fg)';
@@ -647,7 +820,7 @@
       e.stopPropagation();
       openPopup(group.id, header);
     });
-    const name = el('span', 'group-name', group.name || '');
+    const name = marked(el('span', 'group-name'), group.name || '');
     header.classList.toggle('editing', !!popup && popup.groupId === group.id);
     header.title =
       tx(group.collapsed ? 'sidebar.headerCollapsed' : 'sidebar.headerExpanded', nameOf(group), tabCount(count));
@@ -721,7 +894,7 @@
     item.title = tx('sidebar.reopen', nameOf(group), tabCount(group.count));
     item.dataset.focusKey = 'closed:' + group.id;
     item.dataset.vscodeContext = JSON.stringify({ webviewSection: 'closedGroup', groupId: group.id, preventDefaultContextMenuItems: true });
-    item.append(el('span', 'dot'), el('span', 'label', nameOf(group)), el('span', 'description', String(group.count)));
+    item.append(el('span', 'dot'), marked(el('span', 'label'), nameOf(group)), el('span', 'description', String(group.count)));
     const reopen = () => vscode.postMessage({ type: 'reopen', groupId: group.id });
     item.addEventListener('click', reopen);
     item.addEventListener('keydown', (e) => {

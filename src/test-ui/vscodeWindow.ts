@@ -12,7 +12,7 @@ import { downloadAndUnzipVSCode } from '@vscode/test-electron';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ElectronApplication, Frame, Page, _electron } from 'playwright-core';
+import { ElectronApplication, Frame, Locator, Page, _electron } from 'playwright-core';
 import { applyPatch, findWorkbenchHtml, patchStatus, removePatch, scriptName } from '../patch';
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -702,7 +702,7 @@ export class VSCodeWindow {
   async sidebar(): Promise<Frame> {
     for (const start = Date.now(); Date.now() - start < 10_000; await this.idle(50)) {
       for (const frame of this.page.frames()) {
-        if (await frame.$('#root .row').catch(() => null)) {
+        if (await frame.$('#root .row, #root .empty').catch(() => null)) {
           return frame;
         }
       }
@@ -723,6 +723,57 @@ export class VSCodeWindow {
           : (el.closest('.members') ? '  ' : '') + el.querySelector('.label')!.textContent,
       ),
     );
+  }
+
+  /** Clicks the search button on the Tab Groups view's header (it shows while the mouse is over the view). */
+  async clickSidebarSearch(): Promise<void> {
+    await (await this.sidebarHeaderButton('Search Groups and Tabs')).click();
+  }
+
+  /**
+   * A button on the Tab Groups view's header, by its name. The buttons show while the mouse is
+   * over the view, so the mouse is moved there first.
+   */
+  async sidebarHeaderButton(name: string): Promise<Locator> {
+    const title = (await this.page.locator('.part.sidebar .composite.title').boundingBox())!;
+    await this.page.mouse.move(title.x + title.width / 2, title.y + title.height / 2);
+    return this.page.locator(`.part.sidebar .title-actions a[aria-label^="${name}"]`);
+  }
+
+  /** The buttons the Tab Groups view's header shows while the mouse is away from the side bar, by name. */
+  async sidebarHeaderButtonsAway(): Promise<string[]> {
+    const editor = (await this.page.locator('.part.editor').boundingBox())!;
+    await this.page.mouse.move(editor.x + editor.width / 2, editor.y + editor.height / 2);
+    return this.sidebarHeaderButtons();
+  }
+
+  /** The buttons the Tab Groups view's header shows while the mouse is over its list, by name. */
+  async sidebarHeaderButtonsOverList(): Promise<string[]> {
+    const editor = (await this.page.locator('.part.editor').boundingBox())!;
+    await this.page.mouse.move(editor.x + editor.width / 2, editor.y + editor.height / 2);
+    const list = (await this.page.locator('.part.sidebar .content').boundingBox())!;
+    await this.page.mouse.move(list.x + list.width / 2, list.y + list.height / 2, { steps: 5 });
+    await this.idle(500); // the page tells the tab bar script
+    return this.sidebarHeaderButtons();
+  }
+
+  private sidebarHeaderButtons(): Promise<string[]> {
+    return this.page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('.part.sidebar .title-actions .action-item')].filter((li) => li.offsetParent).map((li) => li.firstElementChild!.getAttribute('aria-label') ?? ''),
+    );
+  }
+
+  /** The side bar's search box: shown, focused, and what is typed in it. */
+  async sidebarSearch(): Promise<{ shown: boolean; focused: boolean; value: string }> {
+    const frame = await this.sidebar();
+    return frame.evaluate(() => {
+      const input = document.querySelector<HTMLInputElement>('.search-input')!;
+      return {
+        shown: !input.closest<HTMLElement>('.search')!.hidden,
+        focused: document.activeElement === input && document.hasFocus(),
+        value: input.value,
+      };
+    });
   }
 
   /** The key badge on a group's header in the side bar, or null when it shows none. */

@@ -30,6 +30,8 @@
   "command.goToGroup9": "移至群組 9",
   "command.nextGroup": "移至下一個群組",
   "command.previousGroup": "移至上一個群組",
+  "command.searchTabs": "搜尋群組和分頁",
+  "command.closeSearch": "關閉搜尋",
   "command.showMenu": "顯示分頁群組",
   "command.enablePatch": "啟用 Chrome 風格的分頁群組 (會修補 VS Code)",
   "command.disablePatch": "停用 Chrome 風格的分頁群組",

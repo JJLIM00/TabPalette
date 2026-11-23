@@ -86,7 +86,10 @@ type Incoming =
   | { type: 'dropTabs'; row: number; tabs: { index: number; key: string }[]; target: DropTarget }
   | { type: 'closeTabs'; row: number; tabs: { index: number; key: string }[] }
   /** Ctrl/Shift+click on a tab, done in the tab bar so VS Code selects it there too. */
-  | { type: 'select'; row: number; index: number; key: string; ctrl?: boolean; meta?: boolean; shift?: boolean };
+  | { type: 'select'; row: number; index: number; key: string; ctrl?: boolean; meta?: boolean; shift?: boolean }
+  /** The search box opened or closed (the view's header shows the search button pressed while open). */
+  | { type: 'searchOpen'; open: boolean }
+  | { type: 'hover' };
 
 /** What the group settings popup (the ⋮ button) can do; handled like the tab bar's group editor. */
 const POPUP_ACTIONS = new Set(['rename', 'setColor', 'newTab', 'moveToNewWindow', 'close', 'ungroup', 'delete']);
@@ -127,14 +130,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
+    this.pageReady = false;
     const media = vscode.Uri.joinPath(this.extensionUri, 'resources', 'sidebar');
     this.allowIcons();
     view.webview.html = this.html(view.webview, media);
     view.webview.onDidReceiveMessage((m) => void this.handle(m));
-    view.onDidChangeVisibility(() => this.refresh());
-    view.onDidDispose(() => {
-      this.view = undefined;
+    view.onDidChangeVisibility(() => {
+      if (!view.visible) {
+        this.pageReady = false; // a hidden view's page is gone; it loads again when shown
+      }
+      this.refresh();
     });
+    view.onDidDispose(() => (this.view = undefined));
   }
 
   /** Lets the page load the side bar's files and the file icon themes' icons and fonts. */
@@ -239,9 +246,21 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     const group = () => (typeof m.groupId === 'string' ? this.store.get(m.groupId) : undefined);
     switch (m.type) {
       case 'ready':
+        this.pageReady = true;
         // A page that just loaded has nothing yet: its text (in VS Code's language), then the state.
         void this.view?.webview.postMessage({ type: 'text', text: pageText() });
-        return this.post(true);
+        this.post(true);
+        // A page reloads when the view is shown again (collapsed, or another view shown in the
+        // side bar): an open search box opens again, with what was typed in it.
+        if (this.searchOpen) {
+          void this.view?.webview.postMessage({ type: 'search', restore: true, focus: this.searchPending });
+          this.searchPending = false;
+        }
+        return this.sendSearch();
+      case 'searchOpen':
+        return this.setSearchOpen(m.open === true);
+      case 'hover':
+        return this.bridge()?.sidebarHover();
       case 'select': {
         const found = tabAt();
         const bridge = this.bridge();
@@ -378,6 +397,46 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     void this.view.webview.postMessage({ type: 'edit', groupId });
     this.lastEdit = groupId;
     return true;
+  }
+
+  /**
+   * Opens the search bar at the top of the side bar (the search button on the view's header):
+   * shows and focuses the view, then the page focuses its search box.
+   */
+  async search(): Promise<void> {
+    this.searchPending = true;
+    await vscode.commands.executeCommand(`${SIDEBAR_VIEW_ID}.focus`);
+    this.sendSearch();
+  }
+
+  /** Empties and closes the search bar (the pressed search button on the view's header). */
+  closeSearch(): void {
+    this.searchPending = false;
+    this.setSearchOpen(false); // also when the page is gone, as while the view is collapsed
+    void this.view?.webview.postMessage({ type: 'closeSearch' });
+  }
+
+  /** Whether the search bar is open: the view's header then shows the search button pressed. */
+  searchOpen = false;
+
+  private setSearchOpen(open: boolean): void {
+    if (open !== this.searchOpen) {
+      this.searchOpen = open;
+      void vscode.commands.executeCommand('setContext', 'tabPalette.sidebarSearchOpen', open);
+    }
+  }
+
+  /** A search asked for before the page was ready: sent once it is (see 'ready'). */
+  private searchPending = false;
+
+  /** Whether the view's page has loaded (it says 'ready'); it loads again when the view is shown again. */
+  private pageReady = false;
+
+  private sendSearch(): void {
+    if (this.searchPending && this.view && this.pageReady) {
+      this.searchPending = false;
+      void this.view.webview.postMessage({ type: 'search' });
+    }
   }
 
   /** The group whose settings were last opened through editGroup (for tests). */

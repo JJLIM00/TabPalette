@@ -108,6 +108,93 @@ body::-webkit-scrollbar-thumb:active {
   color: var(--vscode-descriptionForeground);
 }
 
+/* ---------------------------------------------------------------- search */
+
+/* the search box, at the top while the list scrolls under it */
+.search {
+  position: sticky;
+  top: -4px; /* over the body's top padding too */
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  margin: -4px 0 4px;
+  padding: 4px 8px;
+  background: var(--vscode-sideBar-background);
+}
+
+.search[hidden] {
+  display: none;
+}
+
+/* nothing to drop on while searching: the list need not fill the view */
+.search:not([hidden]) + #root {
+  min-height: 0;
+}
+
+.search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 26px 0 6px;
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.search-input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.search-clear {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-left: -23px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-input-foreground);
+  cursor: pointer;
+}
+
+/* nothing to clear */
+.search-input:placeholder-shown + .search-clear {
+  visibility: hidden;
+}
+
+.search-clear:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.search-clear::before {
+  content: '';
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 2px;
+  background: currentColor;
+  mask: var(--icon-close) center / 16px no-repeat;
+  -webkit-mask: var(--icon-close) center / 16px no-repeat;
+}
+
+/* the part of a name that matches the search */
+.match {
+  border-radius: 2px;
+  outline: 1px solid var(--vscode-list-filterMatchBorder, transparent);
+  background: var(--vscode-list-filterMatchBackground, var(--vscode-editor-findMatchHighlightBackground));
+  color: inherit;
+  font-weight: 700;
+}
+
 /* ---------------------------------------------------------------- tabs */
 
 .tab,
