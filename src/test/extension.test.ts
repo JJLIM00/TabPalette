@@ -390,7 +390,7 @@ suite('TabPalette in a real VS Code window', () => {
       await waitFor('d.txt is in a second editor group', () => vscode.window.tabGroups.all.length === 2);
       answerPrompts({ pick: ['Main'] });
       await run('tabPalette.addToGroup', fileUri('d.txt'));
-      await settle(300);
+      await waitFor('d.txt moved next to Main', () => shownGroups(0)[1] === 'd.txt:Main');
       assert.deepStrictEqual(members(main), ['a.txt', 'd.txt']);
       assert.deepStrictEqual(shownGroups(0).slice(0, 2), ['a.txt:Main', 'd.txt:Main']);
       assert.ok(!vscode.window.tabGroups.all.slice(1).some((r) => r.tabs.length > 0), 'not left in the other editor group');
@@ -425,7 +425,7 @@ suite('TabPalette in a real VS Code window', () => {
       answerPrompts({ pick: ['Main'] });
       // VS Code passes a webview tab's resource as a `webview-panel:` URI no tab key matches.
       await run('tabPalette.addToGroup', vscode.Uri.parse('webview-panel:webview-panel/webview-1'), { groupId: 1, editorIndex: index });
-      await settle(300);
+      await waitFor('Graph moved next to Main, still active', () => tabBar()[2] === 'Graph' && activeTab() === 'Graph');
       assert.deepStrictEqual(members(main), ['a.txt', 'b.txt', 'Graph']);
       assert.deepStrictEqual(tabBar(), ['a.txt', 'b.txt', 'Graph', 'c.txt', 'd.txt'], 'it moved next to the group');
       assert.strictEqual(activeTab(), 'Graph', 'and stays the active tab');
@@ -437,7 +437,7 @@ suite('TabPalette in a real VS Code window', () => {
       const index = tabBar().indexOf('Graph');
       answerPrompts({ pick: ['Remove from group'] });
       await run('tabPalette.addToGroup', vscode.Uri.parse('webview-panel:webview-panel/webview-1'), { groupId: 1, editorIndex: index });
-      await settle(300);
+      await waitFor('Graph left Main', () => members(main)?.length === 1);
       assert.deepStrictEqual(prompts.shownPicks[0], ['New group', 'Remove from group']);
       assert.deepStrictEqual(members(main), ['a.txt']);
     });
@@ -449,8 +449,7 @@ suite('TabPalette in a real VS Code window', () => {
       api.store.remove(api.store.groupOf(keyOf('Graph'))!.id);
       answerPrompts({ pick: ['Main'] });
       await run('tabPalette.addToGroup', vscode.Uri.parse(keyOf('Graph')));
-      await waitFor('Graph moved to the first editor group', () => tabBarOf(vscode.window.tabGroups.all[0]).includes('Graph'));
-      await settle(300);
+      await waitFor('Graph moved next to Main', () => tabBarOf(vscode.window.tabGroups.all[0])[1] === 'Graph');
       assert.deepStrictEqual(tabBarOf(vscode.window.tabGroups.all[0]).slice(0, 2), ['a.txt', 'Graph']);
       assert.deepStrictEqual(members(main), ['a.txt', 'Graph']);
       await run('workbench.action.joinAllGroups');

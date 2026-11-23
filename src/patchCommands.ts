@@ -24,9 +24,7 @@ export function registerPatchCommands(ctx: vscode.ExtensionContext, hooks: Patch
   const htmlPath = (quiet = false) => {
     const found = findWorkbenchHtml(vscode.env.appRoot);
     if (!found && !quiet) {
-      void vscode.window.showErrorMessage(
-        t('patch.noWorkbench', vscode.env.appRoot),
-      );
+      void vscode.window.showErrorMessage(t('patch.noWorkbench', vscode.env.appRoot));
     }
     return found;
   };
@@ -38,9 +36,7 @@ export function registerPatchCommands(ctx: vscode.ExtensionContext, hooks: Patch
   };
 
   const reportWriteError = (err: unknown) => {
-    const detail = isPermissionError(err)
-      ? t('patch.noWriteAccess')
-      : String(err);
+    const detail = isPermissionError(err) ? t('patch.noWriteAccess') : String(err);
     void vscode.window.showErrorMessage(t('patch.writeFailed', detail));
   };
 
@@ -115,11 +111,7 @@ export function registerPatchCommands(ctx: vscode.ExtensionContext, hooks: Patch
       if (!ctx.globalState.get<boolean>(DONT_ASK_KEY) && ctx.extensionMode !== vscode.ExtensionMode.Test) {
         const enable = t('patch.offerEnable');
         const dontAsk = t('patch.offerDontAsk');
-        const choice = await vscode.window.showInformationMessage(
-          t('patch.offer'),
-          enable,
-          dontAsk,
-        );
+        const choice = await vscode.window.showInformationMessage(t('patch.offer'), enable, dontAsk);
         if (choice === enable) {
           await enableWithConfirm();
         } else if (choice === dontAsk) {
@@ -146,11 +138,7 @@ export function registerPatchCommands(ctx: vscode.ExtensionContext, hooks: Patch
     } else if (status === 'unpatched') {
       const reapply = t('patch.reapply');
       const turnOff = t('patch.turnOff');
-      const choice = await vscode.window.showInformationMessage(
-        t('patch.removedByUpdate'),
-        reapply,
-        turnOff,
-      );
+      const choice = await vscode.window.showInformationMessage(t('patch.removedByUpdate'), reapply, turnOff);
       if (choice === reapply && (await install())) {
         await promptReload(t('patch.reapplied'));
       } else if (choice === turnOff) {

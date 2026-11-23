@@ -80,6 +80,8 @@
     var state = null;
     /** The text to show, in VS Code's language (see pageText in text.ts); sent before the first state. */
     var text = {};
+    /** A group whose editor bubble the extension asked for: opened once its chip is drawn (see render). */
+    var pendingEdit = null;
 
     /** The text `key`, with {0}, {1} filled in from the other arguments. */
     function tx(key) {
@@ -154,10 +156,17 @@
       sock.onerror = function () {};
     }
 
-    function send(action, groupId, value) {
-      if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({ type: 'action', action: action, groupId: groupId, value: value }));
+    /** Sends a message to the extension; false while not connected. */
+    function post(msg) {
+      if (!ws || ws.readyState !== 1) {
+        return false;
       }
+      ws.send(JSON.stringify(msg));
+      return true;
+    }
+
+    function send(action, groupId, value) {
+      post({ type: 'action', action: action, groupId: groupId, value: value });
     }
 
     // ---------------------------------------------------------------- helpers
@@ -395,8 +404,6 @@
       return rows;
     }
 
-    var pendingEdit = null;
-
     /** Sets or removes (when empty) a data- attribute, touching the DOM only when it changes. */
     function setData(node, name, value) {
       if ((node.dataset[name] || '') !== value) {
@@ -437,9 +444,7 @@
         schedule();
         // The side bar shows the keys on its group headers too. Key presses in the side bar reach
         // this window as well: VS Code passes them on from its webviews.
-        if (ws && ws.readyState === 1) {
-          ws.send(JSON.stringify({ type: 'keysShown', shown: show }));
-        }
+        post({ type: 'keysShown', shown: show });
       }
     }
 
@@ -517,25 +522,19 @@
         });
       }
     }
-    /** Changes a class only when it differs (any change is seen by the observer above). */
-    function setClass(node, name, on) {
-      if (node.classList.contains(name) !== on) {
-        node.classList.toggle(name, on);
-      }
-    }
     function decorateGoToTab() {
       goToTabFrame = 0;
       var widget = document.querySelector('.quick-input-widget');
       var title = widget && widget.querySelector('.quick-input-title');
       var ours = !!goToTab && !!widget && widget.style.display !== 'none' && !!title && title.textContent === goToTab.title;
       if (widget) {
-        setClass(widget, 'tg-goto-tab', ours);
+        toggle(widget, 'tg-goto-tab', ours);
         // The file icon theme draws only inside .show-file-icons: added while ours, if VS Code didn't.
         if (ours && !goToTab.showIcons && !widget.classList.contains('show-file-icons')) {
           goToTab.showIcons = true;
         }
         if (goToTab && goToTab.showIcons) {
-          setClass(widget, 'show-file-icons', ours);
+          toggle(widget, 'show-file-icons', ours);
         }
       }
       if (!ours) {
@@ -578,8 +577,7 @@
         old.remove();
       }
       if (icon.image) {
-        var path = document.createElement('div');
-        path.className = 'monaco-icon-label-iconpath tg-goto-iconpath';
+        var path = el('div', 'monaco-icon-label-iconpath tg-goto-iconpath');
         path.style.backgroundImage = icon.image;
         label.insertBefore(path, label.firstChild);
       }
@@ -651,16 +649,12 @@
             }
           });
         }
-        chip = document.createElement('span');
-        chip.className = 'tg-goto-chip';
+        chip = el('span', 'tg-goto-chip');
         while (label.firstChild) {
           chip.appendChild(label.firstChild);
         }
         if (tag) {
-          var box = document.createElement('span');
-          box.className = 'tg-goto-status';
-          box.textContent = tag;
-          label.appendChild(box);
+          label.appendChild(el('span', 'tg-goto-status', tag));
         }
         label.appendChild(chip);
       }
@@ -684,13 +678,7 @@
       toggle(tab, 'tg-collapsed', !!g && g.collapsed);
       toggle(tab, 'tg-head', first && g.collapsed);
       setVar(tab, '--tg-color', g ? slotColor(g.color) : '');
-      if ((tab.dataset.tgGid || '') !== (g ? g.id : '')) {
-        if (g) {
-          tab.dataset.tgGid = g.id;
-        } else {
-          delete tab.dataset.tgGid;
-        }
-      }
+      setData(tab, 'tgGid', g ? g.id : '');
 
       // .tg-line: the group line along the bottom; .tg-u: Chrome's outline around the active tab.
       ['tg-line', 'tg-u'].forEach(function (cls) {
@@ -716,9 +704,7 @@
         tab.appendChild(chip);
       }
       var name = (g.name || '').trim();
-      if (chip.dataset.gid !== g.id) {
-        chip.dataset.gid = g.id;
-      }
+      setData(chip, 'gid', g.id);
       var label = chip.firstChild;
       if (label.textContent !== name) {
         label.textContent = name;
@@ -901,7 +887,6 @@
       indicator.style.height = Math.max(0, Math.round(t.rect.height - 8)) + 'px';
     }
 
-
     // Right-click on a chip opens the group editor. VS Code handles `contextmenu` for tabs
     // before it reaches the chip, so catch it first: this script loads before the
     // workbench, so a window capture listener runs ahead of VS Code's own.
@@ -981,7 +966,7 @@
       var sig = JSON.stringify(rows);
       if (sig !== lastSelection) {
         lastSelection = sig;
-        ws.send(JSON.stringify({ type: 'tabSelection', rows: rows }));
+        post({ type: 'tabSelection', rows: rows });
       }
     }
 
@@ -1053,7 +1038,7 @@
       var sig = JSON.stringify(rows);
       if (sig !== lastIcons) {
         lastIcons = sig;
-        ws.send(JSON.stringify({ type: 'tabIcons', rows: rows }));
+        post({ type: 'tabIcons', rows: rows });
       }
     }
 

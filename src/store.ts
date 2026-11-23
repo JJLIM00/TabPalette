@@ -94,7 +94,7 @@ export class GroupStore implements vscode.Disposable {
 
   setColor(id: string, color: GroupColor): void {
     const g = this.get(id);
-    if (g) {
+    if (g && g.color !== color) {
       g.color = color;
       this.commit();
     }

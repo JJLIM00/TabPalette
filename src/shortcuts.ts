@@ -104,7 +104,7 @@ export function chipShortcuts(keys: readonly (string | null)[], platform: Platfo
 /** Reads keybindings.json, which may have comments and trailing commas. Anything wrong: no entries. */
 export function parseKeybindings(text: string): KeybindingEntry[] {
   // Drop comments outside strings, then trailing commas.
-  const code = text.replace(/("(?:[^"\\]|\\.)*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m, str: string | undefined) => str ?? '');
+  const code = text.replace(/("(?:[^"\\]|\\.)*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (_, str: string | undefined) => str ?? '');
   try {
     const value: unknown = JSON.parse(code.replace(/,(\s*[\]}])/g, '$1'));
     return Array.isArray(value) ? value.filter((e): e is KeybindingEntry => !!e && typeof e === 'object') : [];
@@ -119,6 +119,7 @@ export function parseKeybindings(text: string): KeybindingEntry[] {
  */
 export class ShortcutWatcher implements vscode.Disposable {
   private keys: (string | null)[];
+  private labels: ChipShortcuts | null;
   private readonly emitter = new vscode.EventEmitter<void>();
   /** The keys changed. */
   readonly onDidChange = this.emitter.event;
@@ -131,6 +132,7 @@ export class ShortcutWatcher implements vscode.Disposable {
     const user = vscode.Uri.file(path.resolve(context.globalStorageUri.fsPath, '..', '..'));
     const file = vscode.Uri.joinPath(user, 'keybindings.json');
     this.keys = resolveGoToKeys(this.platform, []);
+    this.labels = chipShortcuts(this.keys, this.platform);
     const reload = () => void this.load(file);
     this.watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(user, 'keybindings.json'));
     this.watcher.onDidChange(reload);
@@ -141,7 +143,7 @@ export class ShortcutWatcher implements vscode.Disposable {
 
   /** The labels for the chips. */
   get current(): ChipShortcuts | null {
-    return chipShortcuts(this.keys, this.platform);
+    return this.labels;
   }
 
   private async load(file: vscode.Uri): Promise<void> {
@@ -154,6 +156,7 @@ export class ShortcutWatcher implements vscode.Disposable {
     const keys = resolveGoToKeys(this.platform, entries);
     if (keys.join() !== this.keys.join()) {
       this.keys = keys;
+      this.labels = chipShortcuts(keys, this.platform);
       this.emitter.fire();
     }
   }

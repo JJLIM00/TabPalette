@@ -102,6 +102,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
   private view: vscode.WebviewView | undefined;
   private pending: NodeJS.Timeout | undefined;
   private readonly subscriptions: vscode.Disposable[];
+  /** The last state sent to the page (see post). */
+  private lastPosted: string | undefined;
+  /** Whether the view's page has loaded (it says 'ready'); it loads again when the view is shown again. */
+  private pageReady = false;
+  /** A search asked for before the page was ready: sent once it is (see 'ready'). */
+  private searchPending = false;
+  /** Whether the search bar is open: the view's header then shows the search button pressed. */
+  searchOpen = false;
+  /** The group whose settings were last opened through editGroup (for tests). */
+  lastEdit: string | undefined;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -219,7 +229,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     }));
     const fonts = webview ? this.icons.fonts(webview) : [];
     const groupKeys = selectionSync ? bridge!.groupKeys() ?? undefined : undefined;
-    return { rows, groups, selectionSync, fonts: codiconFont ? [...fonts, codiconFont] : fonts, colors: this.settings().colors, ungroupDropLine: this.settings().ungroupDropLine, groupKeys };
+    const settings = this.settings();
+    return { rows, groups, selectionSync, fonts: codiconFont ? [...fonts, codiconFont] : fonts, colors: settings.colors, ungroupDropLine: settings.ungroupDropLine, groupKeys };
   }
 
   /** Handles a message from the page (public for the integration tests). */
@@ -416,9 +427,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     void this.view?.webview.postMessage({ type: 'closeSearch' });
   }
 
-  /** Whether the search bar is open: the view's header then shows the search button pressed. */
-  searchOpen = false;
-
   private setSearchOpen(open: boolean): void {
     if (open !== this.searchOpen) {
       this.searchOpen = open;
@@ -426,21 +434,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     }
   }
 
-  /** A search asked for before the page was ready: sent once it is (see 'ready'). */
-  private searchPending = false;
-
-  /** Whether the view's page has loaded (it says 'ready'); it loads again when the view is shown again. */
-  private pageReady = false;
-
   private sendSearch(): void {
     if (this.searchPending && this.view && this.pageReady) {
       this.searchPending = false;
       void this.view.webview.postMessage({ type: 'search' });
     }
   }
-
-  /** The group whose settings were last opened through editGroup (for tests). */
-  lastEdit: string | undefined;
 
   /** Redraws soon; several changes in a row (a tab move fires a few events) draw once. */
   refresh(): void {
@@ -470,8 +469,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     this.lastPosted = signature;
     void this.view.webview.postMessage({ type: 'state', state });
   }
-
-  private lastPosted: string | undefined;
 
   private html(webview: vscode.Webview, media: vscode.Uri): string {
     const nonce = crypto.randomBytes(16).toString('base64');

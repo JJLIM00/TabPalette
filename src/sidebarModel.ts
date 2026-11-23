@@ -23,8 +23,7 @@ export interface TabDropPlan {
  * What dropping the tab at `from` on `target` does, like dropping it in Chrome's vertical tabs:
  * - dropped before or after a grouped tab, or on a group's header → in that group;
  * - dropped next to an ungrouped tab, or below all tabs → in no group, except that a group's
- *   only tab in this row keeps its group (the group moves with it);
- * - tabs that are not files never join a group.
+ *   only tab in this row keeps its group (the group moves with it).
  * Undefined when nothing changes.
  */
 export function planTabDrop(
@@ -66,7 +65,7 @@ export interface TabsDropPlan {
   order: string[];
   /** How many of the other tabs end up before the dropped tabs. */
   othersBefore: number;
-  /** The group the dropped file tabs join, if any. */
+  /** The group the dropped tabs join, if any. */
   group: string | undefined;
   /** Dropped tabs that leave their group. */
   leaving: string[];
@@ -75,7 +74,7 @@ export interface TabsDropPlan {
 /**
  * Several selected tabs (at `from`, any order) dropped together on `target`, like Chrome:
  * they land side by side, in their row order.
- * - On a grouped tab or a group's header → the file tabs join that group.
+ * - On a grouped tab or a group's header → they join that group.
  * - Elsewhere → each grouped tab leaves its group, unless all of that group's tabs in this
  *   row were dragged along (then the group moves with them).
  * Undefined when nothing changes, or when dropped on one of the dragged tabs.

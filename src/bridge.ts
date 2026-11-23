@@ -16,10 +16,13 @@ import { isOtherTab, tabUri } from './tabs';
  *   origin and clients that send the per-session secret token first.
  * - Handshake: port + token are published to *this window only* as the
  *   accessibility label of a hidden status bar item, which the patch reads from the DOM.
- * - Extension → UI: `text` (the tab bar's text, in VS Code's language) once, then `state` (groups + each tab row's labels and group ids).
- * - UI → extension: `action` messages (collapse, rename, color, close, …), and
- *   `tabSelection` (the selected tabs of every tab row, sent whenever they change).
- * - Extension → UI, for the side bar: `click` (Ctrl/Shift+click a tab, to select it).
+ * - Extension → UI: `text` (the tab bar's text, in VS Code's language) once, then `state` (groups + each tab row's labels and group ids),
+ *   `edit` (open a group's editor bubble), and `goToTab` (draw the rows of "Go to Tab in Group").
+ * - UI → extension: `action` messages (collapse, rename, color, close, …), and reports sent whenever
+ *   they change: `tabSelection` (the selected tabs of every tab row), `tabIcons` (the icons of tabs
+ *   that show no file), `keysShown` (the group keys show, their modifier keys are held).
+ * - Extension → UI, for the side bar: `click` (Ctrl/Shift+click a tab, to select it) and
+ *   `sidebarHover` (the pointer is over the side bar, so its search button shows).
  */
 
 export const BRIDGE_LABEL_PREFIX = 'tab-groups-bridge:';
@@ -102,6 +105,8 @@ export class Bridge implements vscode.Disposable {
   private item: vscode.StatusBarItem | undefined;
   private readonly subscriptions: vscode.Disposable[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
+  /** The last state sent to every tab bar (see broadcast). */
+  private lastState: string | undefined;
   /** The selected tabs of each tab row, kept up to date by the tab bar (positions in the row). */
   private tabSelection = new Map<number, number[]>();
   /** What each window's tab bar reported (each window shows its own tab rows). */
@@ -367,8 +372,6 @@ export class Bridge implements vscode.Disposable {
       this.sendAll(message);
     }
   }
-
-  private lastState: string | undefined;
 
   private sendAll(message: string): void {
     for (const client of this.clients) {

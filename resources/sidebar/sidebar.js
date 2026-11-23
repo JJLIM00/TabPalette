@@ -822,8 +822,7 @@
     });
     const name = marked(el('span', 'group-name'), group.name || '');
     header.classList.toggle('editing', !!popup && popup.groupId === group.id);
-    header.title =
-      tx(group.collapsed ? 'sidebar.headerCollapsed' : 'sidebar.headerExpanded', nameOf(group), tabCount(count));
+    header.title = tx(group.collapsed ? 'sidebar.headerCollapsed' : 'sidebar.headerExpanded', nameOf(group), tabCount(count));
     header.setAttribute('aria-label', nameOf(group) + ', ' + tabCount(count));
     header.append(name);
     // While the modifier keys of "Go to Group N" are held: the group's key, where the count is.
@@ -953,10 +952,7 @@
     const joins = drag.kind === 'tabs' ? tab.groupId : undefined;
     const group = joins && state.groups.find((g) => g.id === joins);
     const leaves = !joins && leavesGroup(row, drag);
-    item.style.setProperty(
-      '--drop-color',
-      group ? colorVar(group.color) : leaves ? ungroupColor() : 'var(--vscode-focusBorder)',
-    );
+    item.style.setProperty('--drop-color', group ? colorVar(group.color) : leaves ? ungroupColor() : 'var(--vscode-focusBorder)');
   }
 
   /** Dropped outside any group, would a dragged tab leave its group? Not when its whole group is dragged along. */
