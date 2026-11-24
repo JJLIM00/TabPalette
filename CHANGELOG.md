@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - **Keyboard shortcuts** to move between groups. Each can be changed in Keyboard Shortcuts:
   - Go to group 1 … 9: `Alt+1` … `Alt+9` (macOS `Ctrl+1` … `Ctrl+9`, Linux `Ctrl+Alt+1` … `Ctrl+Alt+9`). It opens the group's tab you used last, and expands a collapsed group.
